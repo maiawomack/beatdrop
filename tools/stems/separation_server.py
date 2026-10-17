@@ -9,7 +9,7 @@ on 127.0.0.1 only and handles one separation at a time (Demucs uses every CPU co
          -> 202 job (200 with state "done" if this exact audio was separated before)
     GET  /jobs/<id>      -> job
     GET  /tracks         -> index.json of every prepared track
-    GET  /stems/<path>   -> prepared files (<track-id>/manifest.json, waveform.json, *.wav)
+    GET  /stems/<path>   -> prepared files (<track-id>/manifest.json, waveform.json, lyrics.json, *.wav)
     GET  /health         -> {"ok": true, "demucs": bool, "queued": int}
 
     job = {"id", "trackId", "state": queued|decoding|separating|analyzing|done|error,
@@ -194,7 +194,7 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
             if not queued:
                 shutil.rmtree(upload_dir, ignore_errors=True)
             else:
-                print(f"[{job['id']}] queued {params['title']!r}")
+                print(f"[{job['id']}] queued {params['title'] or params['fallback_title']!r}")
             self._json(job, HTTPStatus.ACCEPTED if job["state"] != "done" else HTTPStatus.OK)
 
         # ------------------------------------------------------------ helpers
@@ -204,8 +204,9 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
             first = lambda key: (query.get(key) or [""])[0].strip()  # noqa: E731
             filename = Path(first("filename")).name
             suffix = Path(filename).suffix.lower()
-            params: dict = {"title": first("title") or Path(filename).stem or "Untitled",
-                            "artist": first("artist") or "Unknown Artist",
+            # Missing title/artist are read from the file's tags during separation.
+            params: dict = {"title": first("title") or None, "artist": first("artist") or None,
+                            "fallback_title": Path(filename).stem or "Untitled",
                             "upload_name": ps.slugify(Path(filename).stem)[:60]
                             + (suffix if suffix in AUDIO_SUFFIXES else "")}
             for key in ("start", "duration"):
