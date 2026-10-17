@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+*.log
+# Purchased music and generated stems are licensed to you personally — never commit them
+mp3/*
+!mp3/.gitkeep
+stems/*
+!stems/.gitkeep
