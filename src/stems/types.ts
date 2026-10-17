@@ -30,6 +30,10 @@ export interface TrackManifest {
   /** Exact frame count shared by every stem file. */
   frames: number;
   durationSec: number;
+  /** Where this clip starts in the original song (0 unless trimmed). */
+  clipStartSec?: number;
+  /** Length of the original song. */
+  sourceDurationSec?: number;
   bpm: number;
   bpmSource: 'estimated' | 'manual';
   /** Beat-grid phase: beats fall at firstBeatSec + k * 60 / bpm (k may be 0). */
@@ -43,6 +47,32 @@ export interface TrackManifest {
   stems: Record<StemId, StemFileInfo>;
   /** Path relative to the manifest. */
   waveform: string;
+  /** Path relative to the manifest, or null/absent when no lyrics were found. */
+  lyrics?: string | null;
+}
+
+/** <track-id>/lyrics.json (from LRCLIB). */
+export interface TrackLyrics {
+  version: number;
+  source: 'lrclib';
+  sourceId: number;
+  matchedTitle: string;
+  matchedArtist: string;
+  matchedDurationSec: number;
+  instrumental: boolean;
+  /** True when `lines` carries timestamps matching this recording. */
+  synced: boolean;
+  /** Timestamped lines on the track's own timeline (empty when not synced). */
+  lines: LyricLine[];
+  /** Full lyrics text; always present when lyrics were found. */
+  plain: string;
+}
+
+export interface LyricLine {
+  /** Seconds from the start of the track (same timeline as the stems). */
+  timeSec: number;
+  /** Empty string = instrumental gap. */
+  text: string;
 }
 
 /** index.json at the stems root. */
