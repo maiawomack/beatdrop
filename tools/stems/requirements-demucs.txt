@@ -1,0 +1,5 @@
+-r requirements.txt
+demucs>=4.0
+# torchaudio>=2.9 removed the save backend Demucs uses
+torch<2.9
+torchaudio<2.9

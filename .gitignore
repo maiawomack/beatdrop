@@ -1,5 +1,12 @@
-node_modules
-dist
+node_modules/
+dist/
 .DS_Store
-public/stems/*
-!public/stems/README.md
+
+# Python environments
+.venv/
+.venv-demucs/
+__pycache__/
+
+# Generated stems (large, often copyrighted) -- regenerate with tools/stems/prepare_stems.py
+/public/stems/*
+!/public/stems/README.md
