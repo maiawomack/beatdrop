@@ -1,9 +1,13 @@
-import { HAND_CONNECTIONS, viewToPixels, type PerceptionFrame } from '../perception';
+import { HAND_CONNECTIONS, viewToPixels, type GrabGesture, type PerceptionFrame } from '../perception';
 
 const HAND_COLORS = { Left: '#4fc3f7', Right: '#ffb74d' } as const;
 
-/** Debug visualization of a PerceptionFrame: skeletons, labels, pinch cursor. */
-export function drawHandOverlay(ctx: CanvasRenderingContext2D, frame: PerceptionFrame): void {
+/** Debug visualization of a PerceptionFrame: skeletons, labels, grab cursor. */
+export function drawHandOverlay(
+  ctx: CanvasRenderingContext2D,
+  frame: PerceptionFrame,
+  gesture: GrabGesture = 'grab',
+): void {
   const { width: w, height: h } = ctx.canvas;
   const scale = w / 1000; // keep line widths sane across resolutions
 
@@ -32,15 +36,25 @@ export function drawHandOverlay(ctx: CanvasRenderingContext2D, frame: Perception
     ctx.fillStyle = color;
     ctx.fillText(hand.id, pts[0].x + 10 * scale, pts[0].y + 20 * scale);
 
-    // Pinch cursor: hollow ring when open, filled when pinching.
-    const c = viewToPixels(hand.pinch.point, w, h);
+    // Grab cursor: a progress arc fills as the hand closes, solid dot once engaged.
+    const g = hand[gesture];
+    const c = viewToPixels(g.point, w, h);
+    const r = (14 - 5 * g.strength) * scale;
+    ctx.lineWidth = 2 * scale;
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.beginPath();
-    ctx.arc(c.x, c.y, (hand.pinch.active ? 12 : 9) * scale, 0, Math.PI * 2);
-    if (hand.pinch.active) {
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    if (g.active) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r * 0.75, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-    } else {
-      ctx.lineWidth = 2 * scale;
+    } else if (g.strength > 0.02) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3 * scale;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, -Math.PI / 2, -Math.PI / 2 + g.strength * Math.PI * 2);
       ctx.stroke();
     }
   }

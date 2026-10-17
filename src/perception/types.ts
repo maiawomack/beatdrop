@@ -20,21 +20,30 @@ export interface Landmark extends Point2 {
 }
 
 /**
- * idle  -> not pinching
- * start -> pinch began this frame
- * held  -> pinch continuing
- * end   -> pinch released this frame (or the hand was lost while pinching)
+ * idle  -> gesture not engaged
+ * start -> gesture began this frame
+ * held  -> gesture continuing
+ * end   -> gesture released this frame (or the hand was lost while engaged)
  */
-export type PinchPhase = 'idle' | 'start' | 'held' | 'end';
+export type GesturePhase = 'idle' | 'start' | 'held' | 'end';
 
-export interface PinchState {
-  phase: PinchPhase;
+/** Gestures that can be used to grab things. 'grab' = pinch OR grip. */
+export type GrabGesture = 'pinch' | 'grip' | 'grab';
+
+export interface GestureState {
+  phase: GesturePhase;
   /** True for 'start' and 'held'. */
   active: boolean;
-  /** Smoothed midpoint between thumb tip and index tip, view space. */
+  /** Smoothed anchor point of the gesture, view space. */
   point: Point2;
-  /** Thumb-index distance divided by palm size; ~0.1 closed, ~1+ open. */
+  /**
+   * Openness measure normalized by palm size; lower = more closed.
+   * pinch: thumb-index tip distance   (~0.1 closed, ~1+ open)
+   * grip:  mean fingertip-to-palm distance (~0.4 fist, ~1.1 open)
+   */
   ratio: number;
+  /** 0..1 how close the gesture is to engaging (1 = engaged). For feedback. */
+  strength: number;
 }
 
 export interface HandState {
@@ -44,7 +53,21 @@ export interface HandState {
   confidence: number;
   /** 21 MediaPipe landmarks in view space (last known if not tracked). */
   landmarks: Landmark[];
-  pinch: PinchState;
+  /**
+   * Smoothed knuckle centroid (thumb/index/middle MCP), view space. Barely
+   * moves while fingers open/close, so it's the best point to drag with.
+   */
+  anchor: Point2;
+  /** Thumb + index pinch; point is between the fingertips. */
+  pinch: GestureState;
+  /** Whole-hand grip (fist); point is the palm center. */
+  grip: GestureState;
+  /**
+   * Pinch OR grip: engaged while either is. Point is always the thumb-index
+   * midpoint so switching between the two mid-hold doesn't jump.
+   * Ratio is the more-closed of the two, normalized so < 1 means engaged-ish.
+   */
+  grab: GestureState;
 }
 
 export interface PerceptionFrame {
@@ -58,4 +81,6 @@ export interface RawHand {
   id: HandId;
   confidence: number;
   landmarks: Landmark[];
+  /** Metric 3D landmarks (meters, hand-centered); robust to camera angle. */
+  worldLandmarks: Landmark[];
 }

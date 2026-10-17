@@ -1,16 +1,22 @@
 import { DriftField } from './ar/DriftField';
 import { createHoloObject } from './ar/HoloObject';
 import { InteractionController } from './ar/InteractionController';
-import { renderHolograms } from './ar/renderHolograms';
-import { MockAudioEngine } from './audio/MockAudioEngine';
+import { DEFAULT_STEMS, defaultStemLayout } from './ar/layout';
+import { WaveformRenderer } from './ar/WaveformRenderer';
+import { WebAudioEngine } from './audio/WebAudioEngine';
+import { createEngineWaveforms } from './bridge/engineWaveforms';
 import { createStemAudioBridge } from './bridge/stemAudioBridge';
 import { drawHandOverlay } from './debug/handOverlay';
-import { PerceptionPipeline, type HandState } from './perception';
+import { PerceptionPipeline, type GrabGesture, type HandState } from './perception';
+
+/** 'grab' = pinch OR whole-hand grip; 'pinch' / 'grip' = only that gesture. */
+const GRAB_GESTURE: GrabGesture = 'grab';
 
 const stage = document.getElementById('stage') as HTMLDivElement;
 const video = document.getElementById('webcam') as HTMLVideoElement;
 const canvas = document.getElementById('overlay') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
+const startButton = document.getElementById('start') as HTMLButtonElement;
 const ctx = canvas.getContext('2d')!;
 
 function fitStage(): void {
@@ -28,30 +34,46 @@ function fitStage(): void {
 
 function describe(hand: HandState | undefined): string {
   if (!hand) return '—';
-  const { phase, ratio } = hand.pinch;
+  const { phase } = hand[GRAB_GESTURE];
   const status = hand.tracked ? '' : ' (lost)';
-  return `${phase.padEnd(5)} ratio ${ratio.toFixed(2)}${status}`;
+  return `${phase.padEnd(5)} grip ${hand.grip.ratio.toFixed(2)}  pinch ${hand.pinch.ratio.toFixed(2)}${status}`;
 }
 
 async function main(): Promise<void> {
-  hud.textContent = 'Starting camera + loading hand model…';
-  const pipeline = await PerceptionPipeline.create(video);
+  hud.textContent = 'Starting camera + loading hand model + preparing audio…';
+  const [pipeline, audio] = await Promise.all([
+    PerceptionPipeline.create(video),
+    WebAudioEngine.create(DEFAULT_STEMS.map((s) => s.id)),
+  ]);
   fitStage();
   window.addEventListener('resize', fitStage);
 
-  const stems = [
-    createHoloObject({ id: 'drums', label: 'Drums', position: { x: 0.25, y: 0.5 }, radius: 0.09, color: '#ff5252' }),
-    createHoloObject({ id: 'vocals', label: 'Vocals', position: { x: 0.5, y: 0.5 }, radius: 0.09, color: '#b388ff' }),
-    createHoloObject({ id: 'bass', label: 'Bass', position: { x: 0.75, y: 0.5 }, radius: 0.09, color: '#69f0ae' }),
-  ];
+  const aspect0 = video.videoWidth / video.videoHeight;
+  const stems = defaultStemLayout(aspect0).map(createHoloObject);
 
-  const audio = new MockAudioEngine();
-  const interaction = new InteractionController(
-    stems,
-    video.videoWidth / video.videoHeight,
-    createStemAudioBridge(audio),
-  );
-  const drift = new DriftField(video.videoWidth / video.videoHeight);
+  const bridge = createStemAudioBridge(audio);
+  // Push initial pan/volume so the engine (and readouts) start in sync.
+  for (const obj of stems) bridge({ type: 'move', object: obj });
+
+  const interaction = new InteractionController(stems, aspect0, bridge, GRAB_GESTURE);
+  const drift = new DriftField(aspect0, GRAB_GESTURE);
+  const waveforms = new WaveformRenderer(createEngineWaveforms(audio));
+
+  // Browsers only allow audio to start from a user gesture.
+  startButton.hidden = false;
+  startButton.addEventListener('click', () => {
+    void audio.start();
+    startButton.hidden = true;
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'h' || e.key === 'H') hud.classList.toggle('hidden');
+    if (e.key === ' ') {
+      e.preventDefault();
+      startButton.hidden = true;
+      void audio.togglePause();
+    }
+  });
 
   let frames = 0;
   let fps = 0;
@@ -65,8 +87,8 @@ async function main(): Promise<void> {
     drift.step(interaction.objects, frame);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    renderHolograms(ctx, interaction.objects, frame.timestamp);
-    drawHandOverlay(ctx, frame);
+    waveforms.render(ctx, interaction.objects, frame.timestamp, { mix: audio.stems, backdrop: video });
+    drawHandOverlay(ctx, frame, GRAB_GESTURE);
 
     frames++;
     if (frame.timestamp - fpsWindowStart >= 1000) {
@@ -77,12 +99,12 @@ async function main(): Promise<void> {
     const byId = (id: string) => frame.hands.find((h) => h.id === id);
     const stemLines = stems.map((obj) => {
       const s = audio.stems.get(obj.id);
-      const held = obj.grabbedBy ? `held by ${obj.grabbedBy}` : 'free';
-      const mix = s ? `  pan ${s.pan.toFixed(2)}  vol ${s.volume.toFixed(2)}` : '';
-      return `${obj.label.padEnd(6)}: ${held.padEnd(13)}${mix}`;
+      const held = obj.holders.length ? `held by ${obj.holders.join('+')}` : 'free';
+      const mix = s ? `  pan ${s.pan.toFixed(2)}  vol ${s.volume.toFixed(2)}  stretch ${s.stretch.toFixed(2)}` : '';
+      return `${obj.label.padEnd(6)}: ${held.padEnd(19)}${mix}`;
     });
     hud.textContent =
-      `tracking ${fps.toFixed(0)} fps\n` +
+      `tracking ${fps.toFixed(0)} fps   audio: ${audio.sourceKind === 'files' ? 'stem files' : 'demo song'} ${audio.playing ? '▶' : '❚❚'}   [space] play/pause  [H] hide\n` +
       `Left : ${describe(byId('Left'))}\n` +
       `Right: ${describe(byId('Right'))}\n` +
       stemLines.join('\n');

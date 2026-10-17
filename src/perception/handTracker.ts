@@ -47,6 +47,7 @@ export class HandTracker {
         id: SWAP_HANDEDNESS ? opposite(label) : label,
         confidence: category?.score ?? 0,
         landmarks: lms.map(toViewSpace),
+        worldLandmarks: result.worldLandmarks[i] ?? [],
       };
     });
 

@@ -3,6 +3,7 @@ import type { AudioCommand, AudioCommandSink, StemId } from './AudioCommands';
 export interface MockStemState {
   pan: number;
   volume: number;
+  stretch: number;
   grabbed: boolean;
 }
 
@@ -11,7 +12,7 @@ export class MockAudioEngine implements AudioCommandSink {
   readonly stems = new Map<StemId, MockStemState>();
 
   dispatch(command: AudioCommand): void {
-    const stem = this.stems.get(command.stemId) ?? { pan: 0, volume: 1, grabbed: false };
+    const stem = this.stems.get(command.stemId) ?? { pan: 0, volume: 1, stretch: 0, grabbed: false };
     this.stems.set(command.stemId, stem);
 
     switch (command.type) {
@@ -28,6 +29,9 @@ export class MockAudioEngine implements AudioCommandSink {
         break;
       case 'setVolume':
         stem.volume = command.value;
+        break;
+      case 'setStretch':
+        stem.stretch = command.value;
         break;
     }
   }

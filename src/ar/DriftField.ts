@@ -1,31 +1,31 @@
-import type { HandId, PerceptionFrame, Point2 } from '../perception';
+import type { GrabGesture, HandId, PerceptionFrame, Point2 } from '../perception';
 import type { HoloObject } from './HoloObject';
 
 export interface DriftConfig {
   /** How strongly hand velocity pushes objects. */
   gain: number;
-  /** Hands within radius * this are able to push. */
+  /** Hands within (half width * this) of the center are able to push. */
   influenceScale: number;
   /** Spring pulling drift back to zero (higher = snappier return). */
   stiffness: number;
   /** 1 = no wobble, < 1 = a little float/overshoot. */
   dampingRatio: number;
-  /** Max drift as a multiple of the object's radius. */
+  /** Max drift as a multiple of the object's half height (kept small so it stays easy to grab). */
   maxDriftScale: number;
 }
 
 export const DEFAULT_DRIFT_CONFIG: DriftConfig = {
-  gain: 8,
-  influenceScale: 3.5,
+  gain: 5,
+  influenceScale: 1.6,
   stiffness: 40,
   dampingRatio: 0.55,
-  maxDriftScale: 1.0,
+  maxDriftScale: 0.5,
 };
 
 /**
  * Makes free objects drift with nearby hand movement, like they're floating
  * in air the hand disturbs, then spring back. Push scales with hand speed, so
- * a slow reach to pinch barely moves the object while a swipe nudges it.
+ * a slow reach to grab barely moves the object while a swipe nudges it.
  *
  * Internally works in "height units" (x scaled by aspect) so motion is round.
  */
@@ -35,7 +35,12 @@ export class DriftField {
   private lastHand = new Map<HandId, { p: Point2; t: number }>();
   private lastT: number | null = null;
 
-  constructor(private aspect: number, config: Partial<DriftConfig> = {}) {
+  /** @param gesture the grab gesture; its anchor point is used as the hand position */
+  constructor(
+    private aspect: number,
+    private gesture: GrabGesture = 'grab',
+    config: Partial<DriftConfig> = {},
+  ) {
     this.cfg = { ...DEFAULT_DRIFT_CONFIG, ...config };
   }
 
@@ -61,10 +66,10 @@ export class DriftField {
       let ax = -stiffness * d.x - damping * v.x;
       let ay = -stiffness * d.y - damping * v.y;
 
-      if (!obj.grabbedBy) {
+      if (obj.holders.length === 0) {
         const cx = (obj.position.x + obj.drift.x) * this.aspect;
         const cy = obj.position.y + obj.drift.y;
-        const reach = obj.radius * influenceScale;
+        const reach = obj.halfSize.x * influenceScale;
         for (const h of hands) {
           const dist = Math.hypot(h.p.x - cx, h.p.y - cy);
           if (dist >= reach) continue;
@@ -79,7 +84,7 @@ export class DriftField {
       d.x += v.x * dt;
       d.y += v.y * dt;
 
-      const max = obj.radius * maxDriftScale;
+      const max = obj.halfSize.y * maxDriftScale;
       const mag = Math.hypot(d.x, d.y);
       if (mag > max) {
         d.x *= max / mag;
@@ -99,11 +104,12 @@ export class DriftField {
     for (const hand of frame.hands) {
       if (!hand.tracked) continue;
       seen.add(hand.id);
-      const p = { x: hand.pinch.point.x * this.aspect, y: hand.pinch.point.y };
+      const { point, active } = hand[this.gesture];
+      const p = { x: point.x * this.aspect, y: point.y };
       const prev = this.lastHand.get(hand.id);
       this.lastHand.set(hand.id, { p, t });
-      // A pinching hand is grabbing, not disturbing the air.
-      if (!prev || hand.pinch.active) continue;
+      // A grabbing hand isn't disturbing the air.
+      if (!prev || active) continue;
       const dt = (t - prev.t) / 1000;
       if (dt <= 0 || dt > 0.2) continue;
       out.push({ p, v: { x: (p.x - prev.p.x) / dt, y: (p.y - prev.p.y) / dt } });

@@ -12,14 +12,44 @@
       /* Mirror the feed so it behaves like a mirror. The overlay canvas is NOT
          flipped: perception already outputs mirrored coordinates. */
       #stage video { transform: scaleX(-1); object-fit: cover; }
-      #hud { position: absolute; top: 8px; left: 8px; font: 13px/1.4 ui-monospace, monospace;
-             background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 6px; white-space: pre; }
+      #hud { position: absolute; left: 14px; bottom: 14px; z-index: 3;
+             font: 11px/1.5 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .02em;
+             color: rgba(200, 225, 255, .8); white-space: pre; pointer-events: none;
+             background: rgba(6, 10, 22, .45); border: 1px solid rgba(120, 180, 255, .18);
+             padding: 8px 12px; border-radius: 10px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #hud.hidden { display: none; }
+      /* Soft vignette + faint scanlines for a holographic workstation feel. */
+      #fx { position: absolute; inset: 0; pointer-events: none; z-index: 1;
+            background:
+              radial-gradient(ellipse at center, transparent 55%, rgba(2, 4, 14, .55) 100%),
+              repeating-linear-gradient(0deg, rgba(120, 200, 255, .025) 0 1px, transparent 1px 3px); }
+      #overlay { z-index: 2; }
+      #brand { position: absolute; top: 14px; left: 16px; z-index: 3; pointer-events: none;
+               font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
+               color: rgba(190, 220, 255, .75); text-shadow: 0 0 8px rgba(80, 180, 255, .6); }
+      #brand span { color: rgba(190, 220, 255, .4); }
+      #hint { position: absolute; bottom: 16px; right: 16px; z-index: 3;
+              pointer-events: none; font: 10px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .2em;
+              color: rgba(190, 220, 255, .55); white-space: nowrap; }
+      @media (max-width: 700px) { #hint { display: none; } }
+      #start { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4;
+               font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
+               color: #e8f4ff; background: rgba(8, 14, 32, .55); cursor: pointer;
+               border: 1px solid rgba(120, 200, 255, .5); border-radius: 999px; padding: 14px 28px;
+               box-shadow: 0 0 24px rgba(80, 180, 255, .35), inset 0 0 12px rgba(80, 180, 255, .15);
+               backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #start:hover { box-shadow: 0 0 36px rgba(80, 180, 255, .6), inset 0 0 16px rgba(80, 180, 255, .25); }
+      #start[hidden] { display: none; }
     </style>
   </head>
   <body>
     <div id="stage">
       <video id="webcam" autoplay playsinline muted></video>
+      <div id="fx"></div>
       <canvas id="overlay"></canvas>
+      <div id="brand">BEATDROP <span>// SPATIAL MIX</span></div>
+      <div id="hint">PINCH OR GRIP A WAVEFORM · DRAG TO PAN / LEVEL · BOTH HANDS TO STRETCH</div>
+      <button id="start" hidden>▶ START SESSION</button>
       <div id="hud">Starting camera…</div>
     </div>
     <script type="module" src="/src/main.ts"></script>

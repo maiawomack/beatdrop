@@ -5,8 +5,18 @@ export const LM = {
   INDEX_MCP: 5,
   INDEX_TIP: 8,
   MIDDLE_MCP: 9,
+  MIDDLE_TIP: 12,
+  RING_MCP: 13,
+  RING_TIP: 16,
   PINKY_MCP: 17,
+  PINKY_TIP: 20,
 } as const;
+
+/** Landmarks averaged to get the palm center. */
+export const PALM_POINTS = [LM.WRIST, LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP] as const;
+
+/** The four fingertips (excluding thumb) used to measure grip. */
+export const FINGERTIPS = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP] as const;
 
 /** Bone connections for drawing a hand skeleton. */
 export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
