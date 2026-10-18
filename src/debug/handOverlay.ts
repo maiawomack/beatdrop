@@ -11,6 +11,7 @@ const MODE_LABELS: Partial<Record<HandMode, string>> = {
   loopSelecting: 'LOOP',
   clipPulling: 'PULL OUT LOOP',
   filterControl: 'FILTER',
+  volume: 'VOLUME ↕',
   buildArmed: 'BUILD',
   building: 'BUILD',
   dropPending: 'DROP',

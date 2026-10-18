@@ -1,8 +1,11 @@
 import type { LoopBeats } from '../audio/AudioCommands';
 import type { GrabGesture, HandId, HandState, PerceptionFrame, Point2 } from '../perception';
 import {
+  CAP_GAP,
   CAP_RADIUS,
+  capCenter,
   capOffset,
+  effectiveHalfHeight,
   effectiveHalfWidth,
   hasCap,
   LEVEL_HANDLE_ENABLED,
@@ -17,12 +20,16 @@ import {
  * Waveforms are thin, so the vertical padding is especially generous.
  */
 const HIT_PAD = { x: 0.07, y: 0.11 };
+/** Standing bars sit side by side, so their padding is much tighter sideways. */
+const BAR_HIT_PAD = { x: 0.025, y: 0.04 };
 /** Level handle hit area: half width and extra length beyond the track ends. */
 const HANDLE_HIT = { halfWidth: 0.04, pad: 0.03 };
 /** Vertical hand travel (view-height units) that sweeps the fader 0 → 1. */
 export const LEVEL_TRAVEL = 0.4;
 /** Hand jitter (view-height units) ignored before the fader starts moving. */
 export const LEVEL_DEADZONE = 0.02;
+/** Max volume change per second on a locked stem, so a tracking glitch can't jump the level. */
+export const VOLUME_MAX_RATE = 3;
 /** A targeted object stays targeted until the hand is this far outside its hitbox (hover hysteresis). */
 const TARGET_EXIT = 0.05;
 /** A second hand may join a held stem (to stretch it) from this much further out. */
@@ -123,6 +130,7 @@ export type HandMode =
   | 'blending'
   | 'loopSelecting'
   | 'filterControl'
+  | 'volume'
   | 'clipPulling'
   | 'buildArmed'
   | 'building'
@@ -205,6 +213,11 @@ interface BodyGrab {
   filterStart: number;
   filterValue: number;
   twisting: boolean;
+  /** Locked stems: hand drag point at grab, and the volume control it drives. */
+  startHand: Point2;
+  startVolume: number;
+  volumeValue: number;
+  volumeActive: boolean;
 }
 
 interface LevelGrab {
@@ -380,8 +393,9 @@ export class InteractionController {
     }
     for (const obj of this.objects) {
       obj.twist = null;
+      obj.volumeAdjust = null;
       if (obj.holders.length === 0) continue;
-      this.follow(obj, points);
+      this.follow(obj, points, dt);
       record(this.positionHistory, obj.id, t, obj.position);
       this.onEvent({ type: 'move', object: obj });
     }
@@ -414,6 +428,7 @@ export class InteractionController {
       } else if (g.kind === 'body') {
         if (g.twisting) mode = 'filterControl';
         else if (g.object.holders.length === 2) mode = 'stretching';
+        else if (g.volumeActive) mode = 'volume';
         else if (this.blendPair?.includes(g.object)) mode = 'blending';
         else mode = g.maxTravel < TAP_MOVE ? 'grabbing' : 'repositioning';
       } else if (g.kind === 'loop') mode = g.pulled ? 'clipPulling' : 'loopSelecting';
@@ -496,6 +511,10 @@ export class InteractionController {
       filterStart: target.audio.filter,
       filterValue: target.audio.filter,
       twisting: false,
+      startHand: { ...anchorNow },
+      startVolume: target.audio.volume,
+      volumeValue: target.audio.volume,
+      volumeActive: false,
     });
     this.targets.delete(hand.id);
     this.rebaseOffset(target, points);
@@ -557,6 +576,17 @@ export class InteractionController {
 
     if (obj.holders.length > 0) {
       this.rebaseOffset(obj, points);
+      // The remaining hand picks up volume control from where it is now (no jump).
+      for (const h of obj.holders) {
+        const other = this.grabs.get(h);
+        const p = this.dragPoints.get(h);
+        if (other?.kind === 'body' && p) {
+          other.startHand = { ...p };
+          other.startVolume = obj.audio.volume;
+          other.volumeValue = obj.audio.volume;
+          other.volumeActive = false;
+        }
+      }
       this.onEvent({ type: 'stretchEnd', object: obj, hand });
       return;
     }
@@ -787,7 +817,11 @@ export class InteractionController {
   }
 
   /** One hand: follow it. Two hands: follow their midpoint and stretch between them. */
-  private follow(obj: HoloObject, points: Map<HandId, Point2>): void {
+  private follow(obj: HoloObject, points: Map<HandId, Point2>, dt: number): void {
+    if (obj.locked) {
+      this.holdLocked(obj, points, dt);
+      return;
+    }
     const anchor = this.anchor(obj, this.dragPoints);
     const offset = this.offsets.get(obj.id) ?? { x: 0, y: 0 };
     obj.position = { x: clamp01(anchor.x + offset.x), y: clamp01(anchor.y + offset.y) };
@@ -808,6 +842,43 @@ export class InteractionController {
       obj.stretchAmount = clamp01(base.amount + (this.span(obj, points) - base.span) / STRETCH_GESTURE_SPAN);
       obj.stretch = { ends: [a, b] };
     }
+  }
+
+  /**
+   * A locked stem stays in its slot. One hand: vertical movement sets the
+   * volume (relative to where it grabbed, with a dead zone and a rate limit).
+   * Two hands: their vertical spread stretches it taller (echo FX).
+   */
+  private holdLocked(obj: HoloObject, points: Map<HandId, Point2>, dt: number): void {
+    obj.holdPoints = obj.holders.map((h) => ({ ...points.get(h)! }));
+    for (const h of obj.holders) {
+      const g = this.grabs.get(h);
+      const p = this.dragPoints.get(h);
+      if (g?.kind !== 'body' || !p) continue;
+      // Taps are judged by how far the hand moved (the stem itself never moves).
+      g.maxTravel = Math.max(g.maxTravel, Math.hypot((p.x - g.startHand.x) * this.aspect, p.y - g.startHand.y));
+      if (obj.holders.length === 1) this.adjustVolume(h, g, p, dt);
+    }
+    if (obj.holders.length === 2) {
+      const base = this.stretchBase.get(obj.id) ?? { amount: obj.stretchAmount, span: this.span(obj, points) };
+      obj.stretchAmount = clamp01(base.amount + (this.span(obj, points) - base.span) / STRETCH_GESTURE_SPAN);
+      const [a, b] = obj.holdPoints;
+      obj.stretch = { ends: [a, b] };
+    }
+  }
+
+  private adjustVolume(hand: HandId, g: BodyGrab, p: Point2, dt: number): void {
+    const obj = g.object;
+    const dy = g.startHand.y - p.y; // up = louder
+    const moved = Math.sign(dy) * Math.max(0, Math.abs(dy) - LEVEL_DEADZONE);
+    if (!g.volumeActive && moved === 0) return;
+    g.volumeActive = true;
+    const target = clamp01(g.startVolume + moved / LEVEL_TRAVEL);
+    const value = stepToward(g.volumeValue, target, VOLUME_MAX_RATE * Math.max(dt, 1 / 60));
+    obj.volumeAdjust = value;
+    if (value === g.volumeValue) return;
+    g.volumeValue = value;
+    this.onEvent({ type: 'level', object: obj, hand, value });
   }
 
   /** Two different stems held one-per-hand form a blend pair; their hand spread sets isolation. */
@@ -845,8 +916,12 @@ export class InteractionController {
    */
   private footprint(obj: HoloObject): { left: number; right: number; y: number } {
     const body = effectiveHalfWidth(obj) + 0.01;
+    if (obj.vertical) {
+      // Caps above and below, plus the label on top.
+      return { left: body, right: body, y: effectiveHalfHeight(obj) + CAP_GAP + CAP_RADIUS + 0.04 };
+    }
     const caps = Math.abs(capOffset(obj, 'filter')) + CAP_RADIUS + 0.005;
-    if (!LEVEL_HANDLE_ENABLED) return { left: caps, right: caps, y: obj.halfSize.y + 0.035 };
+    if (!LEVEL_HANDLE_ENABLED) return { left: caps, right: caps, y: effectiveHalfHeight(obj) + 0.035 };
     const { dx, halfLength } = levelHandle(obj);
     return { left: body, right: dx + 0.02, y: Math.max(obj.halfSize.y, halfLength) + 0.035 };
   }
@@ -875,8 +950,8 @@ export class InteractionController {
         const q = this.objects[j];
         // A clip may overlap its own source (that's how it goes back in); returning clips are ghosts.
         if (p.clipOf === q.id || q.clipOf === p.id || p.returning || q.returning) continue;
-        const pHeld = p.holders.length > 0 || p.levelHand !== null;
-        const qHeld = q.holders.length > 0 || q.levelHand !== null;
+        const pHeld = p.holders.length > 0 || p.levelHand !== null || p.locked;
+        const qHeld = q.holders.length > 0 || q.levelHand !== null || q.locked;
         if (pHeld && qHeld) continue;
         const fp = this.footprint(p);
         const fq = this.footprint(q);
@@ -907,6 +982,7 @@ export class InteractionController {
 
     // Keep every stem fully on screen; flicked ones bounce off the edges.
     for (const obj of this.objects) {
+      if (obj.locked) continue;
       const f = this.footprint(obj);
       const minX = Math.min(0.5, f.left / a);
       const maxX = Math.max(0.5, 1 - f.right / a);
@@ -940,8 +1016,10 @@ export class InteractionController {
   }
 
   /** Distance between the two holding hands, view-height units. */
+  /** Distance between the two holding hands, view-height units (vertical only for locked stems). */
   private span(obj: HoloObject, points: Map<HandId, Point2>): number {
     const [da, db] = obj.holders.map((h) => points.get(h)!);
+    if (obj.locked) return Math.abs(da.y - db.y);
     return Math.hypot((da.x - db.x) * this.aspect, da.y - db.y);
   }
 
@@ -967,8 +1045,9 @@ export class InteractionController {
   private hitMetrics(point: Point2, obj: HoloObject): { outside: number; centrality: number } {
     const dx = Math.abs(point.x - obj.position.x) * this.aspect;
     const dy = Math.abs(point.y - obj.position.y);
-    const hx = effectiveHalfWidth(obj) + HIT_PAD.x;
-    const hy = obj.halfSize.y + HIT_PAD.y;
+    const pad = obj.vertical ? BAR_HIT_PAD : HIT_PAD;
+    const hx = effectiveHalfWidth(obj) + pad.x;
+    const hy = effectiveHalfHeight(obj) + pad.y;
     const outside = Math.hypot(Math.max(0, dx - hx), Math.max(0, dy - hy));
     return { outside, centrality: Math.max(dx / hx, dy / hy) };
   }
@@ -994,8 +1073,9 @@ export class InteractionController {
 
   /** Distance from a point to a cap's center minus the cap hit radius (<= 0 means on it), view-height units. */
   private capDistance(point: Point2, obj: HoloObject, kind: StemControl): number {
-    const cx = obj.position.x + capOffset(obj, kind) / this.aspect;
-    return Math.hypot((point.x - cx) * this.aspect, point.y - obj.position.y) - CAP_HIT;
+    const c = capCenter(obj, kind);
+    const cx = obj.position.x + c.dx / this.aspect;
+    return Math.hypot((point.x - cx) * this.aspect, point.y - (obj.position.y + c.dy)) - CAP_HIT;
   }
 
   /** Nearest free stem cap under the point. Caps only work on stems nobody is holding. */

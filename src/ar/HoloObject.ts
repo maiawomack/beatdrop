@@ -92,6 +92,20 @@ export interface HoloObject {
   returning: boolean;
   /** While a holding hand twists the filter: the filter value it's asking for. */
   twist: number | null;
+  /**
+   * Locked in its slot (deck stems): grabbing never moves it. Instead the
+   * hand's vertical movement sets the volume (like the decks screen's
+   * vertical stem faders), and a two-hand stretch makes it taller, not wider.
+   */
+  locked: boolean;
+  /** While a hand is setting the volume of a locked stem: the volume it's asking for. */
+  volumeAdjust: number | null;
+  /**
+   * Drawn as a standing bar (like the decks screen's stem faders): `halfSize`
+   * is then narrow in x and tall in y, the waveform runs bottom to top, the
+   * filter cap sits above and the loop cap below.
+   */
+  vertical: boolean;
 }
 
 /**
@@ -109,6 +123,16 @@ export const CAP_ROOM = CAP_GAP + CAP_RADIUS + 0.005;
 /** Loop clips are smaller than stems. */
 export const CLIP_HALF_SIZE = { x: 0.11, y: 0.045 };
 
+/**
+ * Cap center relative to the object's center, view-height units. Bars:
+ * filter above, loop below. Horizontal stems: loop left, filter right.
+ */
+export function capCenter(obj: HoloObject, kind: StemControl): { dx: number; dy: number } {
+  if (!obj.vertical) return { dx: capOffset(obj, kind), dy: 0 };
+  const d = effectiveHalfHeight(obj) + CAP_GAP;
+  return { dx: 0, dy: kind === 'filter' ? -d : d };
+}
+
 /** Which caps an object has: clips always loop, so they only get a filter cap. */
 export function hasCap(obj: HoloObject, kind: StemControl): boolean {
   return kind === 'filter' || obj.clipOf === null;
@@ -123,7 +147,18 @@ export function capOffset(obj: HoloObject, kind: StemControl): number {
 
 /** Half width including persistent stretch, view-height units. */
 export function effectiveHalfWidth(obj: HoloObject): number {
+  if (obj.locked) return obj.halfSize.x;
   return obj.halfSize.x + (obj.stretchAmount * FULL_STRETCH_SPAN) / 2;
+}
+
+/** A locked stem grows this much taller (× its height) at full stretch (less for already-tall bars). */
+export const LOCKED_STRETCH_GROW = 1;
+const VERTICAL_STRETCH_GROW = 0.35;
+
+/** Half height including a locked stem's vertical stretch, view-height units. */
+export function effectiveHalfHeight(obj: HoloObject): number {
+  if (!obj.locked) return obj.halfSize.y;
+  return obj.halfSize.y * (1 + (obj.vertical ? VERTICAL_STRETCH_GROW : LOCKED_STRETCH_GROW) * obj.stretchAmount);
 }
 
 /**
@@ -165,6 +200,9 @@ export function createHoloObject(init: HoloObjectInit): HoloObject {
     clipOf: null,
     returning: false,
     twist: null,
+    locked: false,
+    volumeAdjust: null,
+    vertical: false,
   };
 }
 

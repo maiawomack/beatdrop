@@ -1,7 +1,9 @@
 import { viewToPixels, type Point2 } from '../perception';
 import {
+  CAP_GAP,
   CAP_RADIUS,
-  capOffset,
+  capCenter,
+  effectiveHalfHeight,
   effectiveHalfWidth,
   hasCap,
   LEVEL_HANDLE_ENABLED,
@@ -109,7 +111,7 @@ export class WaveformRenderer {
       const frame = this.bodyFrame(ctx, obj, vis);
       if (!this.source.peaks(obj.id, this.peaks, t)) this.peaks.fill(0.05);
       this.shapeForFilter(obj.audio.filter);
-      this.drawTrail(ctx, obj, frame, vis);
+      if (!obj.locked) this.drawTrail(ctx, obj, frame, vis);
       this.drawReflection(ctx, obj, frame, vis);
       this.drawBody(ctx, obj, frame, vis, t, opts);
       if (!obj.stretch && !obj.returning) {
@@ -156,9 +158,12 @@ export class WaveformRenderer {
       (1 + 0.12 * vis.focus - 0.1 * vis.recede) *
       (1 - 0.8 * vis.ret);
     const W = effectiveHalfWidth(obj) * 2 * ch * scale;
-    const H = obj.halfSize.y * 2 * ch * scale * (1 - 0.25 * obj.stretchAmount);
+    // Locked stems stretch taller; free ones stretch wider (and get a little thinner).
+    const H = obj.locked
+      ? effectiveHalfHeight(obj) * 2 * ch * scale
+      : obj.halfSize.y * 2 * ch * scale * (1 - 0.25 * obj.stretchAmount);
 
-    if (obj.stretch) {
+    if (obj.stretch && !obj.locked) {
       const a = viewToPixels(obj.stretch.ends[0], cw, ch);
       const b = viewToPixels(obj.stretch.ends[1], cw, ch);
       let angle = Math.atan2(b.y - a.y, b.x - a.x);
@@ -311,10 +316,14 @@ export class WaveformRenderer {
     }
 
     // --- Layered waveform -------------------------------------------------------
-    const { x0, x1, amp } = this.waveGeometry(obj, f, live);
+    // Bars draw the same waveform turned upright (time runs bottom to top).
+    const wf = obj.vertical ? { ...f, W: H, H: W } : f;
+    ctx.save();
+    if (obj.vertical) ctx.rotate(-Math.PI / 2);
+    const { x0, x1, amp } = this.waveGeometry(obj, wf, live);
 
     // Depth layers: larger, fainter, slightly offset copies behind the main one.
-    for (const [scale, dy, alpha] of [[1.35, H * 0.06, 0.1], [1.15, H * 0.03, 0.18]] as const) {
+    for (const [scale, dy, alpha] of [[1.35, wf.H * 0.06, 0.1], [1.15, wf.H * 0.03, 0.18]] as const) {
       ctx.save();
       ctx.translate(0, dy);
       ctx.strokeStyle = rgba(base, alpha * (0.6 + 0.6 * live));
@@ -368,18 +377,29 @@ export class WaveformRenderer {
     // Playhead.
     const px = x0 + (x1 - x0) * p;
     ctx.beginPath();
-    ctx.moveTo(px, -H * 0.42);
-    ctx.lineTo(px, H * 0.42);
+    ctx.moveTo(px, -wf.H * 0.42);
+    ctx.lineTo(px, wf.H * 0.42);
     ctx.strokeStyle = rgba(bright, 0.35);
     ctx.lineWidth = u;
     ctx.stroke();
 
     const loop = this.source.loop?.(obj.id) ?? null;
-    if (loop) this.drawLoopRegion(ctx, loop, x0, x1, H, base, u);
-    else if (obj.loopPreview) this.drawLoopPreview(ctx, obj.loopPreview, x0, x1, H, base, u);
+    if (loop) this.drawLoopRegion(ctx, loop, x0, x1, wf.H, base, u);
+    else if (obj.loopPreview) this.drawLoopPreview(ctx, obj.loopPreview, x0, x1, wf.H, base, u);
+    ctx.restore();
+
+    if (obj.locked) this.drawVolumeFill(ctx, obj, W, H, base, u);
+
+    if (obj.vertical) {
+      this.drawBarLabels(ctx, obj, H, vis, bright, u);
+      ctx.restore();
+      return;
+    }
 
     // --- Labels ------------------------------------------------------------------
-    const fs = Math.max(u * 10, H * 0.14);
+    // Label size follows the stem's base height, so stretching a locked stem taller doesn't blow up its text.
+    const baseH = obj.locked ? H / (effectiveHalfHeight(obj) / obj.halfSize.y) : H;
+    const fs = Math.max(u * 10, baseH * 0.14);
     const ty = -H / 2 - fs * 0.9;
     ctx.font = `600 ${fs}px ui-monospace, "SF Mono", Menlo, monospace`;
     ctx.textBaseline = 'middle';
@@ -419,7 +439,11 @@ export class WaveformRenderer {
       setLetterSpacing(ctx, `${(fs * 0.12).toFixed(1)}px`);
       ctx.textAlign = 'right';
       ctx.fillStyle = `rgba(230,236,255,${readoutAlpha.toFixed(3)})`;
-      ctx.fillText([status, performanceText(obj) ?? readout(obj)].filter(Boolean).join(' · '), W / 2 - H * 0.3, ty);
+      const text = [status, performanceText(obj) ?? readout(obj)].filter(Boolean).join(' · ');
+      const right = W / 2 - H * 0.3;
+      // Not enough room beside the name (long song titles): put it on its own line above.
+      const fits = right - ctx.measureText(text).width > bx + fs * 0.4;
+      ctx.fillText(text, right, fits ? ty : ty - fs * 1.3);
     }
 
     setLetterSpacing(ctx, '0px');
@@ -527,7 +551,10 @@ export class WaveformRenderer {
     const ch = ctx.canvas.height;
     const u = ch / 720;
     const r = CAP_RADIUS * ch;
-    const x = capOffset(obj, kind) * ch * (f.W / (effectiveHalfWidth(obj) * 2 * ch));
+    const c = capCenter(obj, kind);
+    const k = obj.vertical ? f.H / (effectiveHalfHeight(obj) * 2 * ch) : f.W / (effectiveHalfWidth(obj) * 2 * ch);
+    const x = c.dx * ch * k;
+    const y = c.dy * ch * k;
     const base = desaturate(hexToRgb(obj.color), 0.7 * vis.silent);
     const bright = mixRgb(base, [255, 255, 255], 0.5);
     const held = obj.control?.kind === kind;
@@ -538,7 +565,7 @@ export class WaveformRenderer {
     ctx.save();
     ctx.translate(f.cx, f.cy);
     ctx.rotate(f.angle);
-    ctx.translate(x, 0);
+    ctx.translate(x, y);
     ctx.globalAlpha = alpha * (1 - 0.5 * vis.silent);
     const scale = 1 + 0.15 * hover + (held ? 0.25 : 0);
     ctx.scale(scale, scale);
@@ -563,13 +590,15 @@ export class WaveformRenderer {
     ctx.textBaseline = 'middle';
     // Hints go under the cap, extending toward the screen center so they never clip at an edge.
     const inward: CanvasTextAlign = f.cx + x < ctx.canvas.width / 2 ? 'left' : 'right';
-    const hintX = inward === 'left' ? -r * 0.2 : r * 0.2;
+    // Bars: beside the cap (above/below is the label and status line).
+    const hintX = obj.vertical ? (inward === 'left' ? r * 1.5 : -r * 1.5) : inward === 'left' ? -r * 0.2 : r * 0.2;
+    const hintY = obj.vertical ? -fs * 0.55 : r * 1.7;
     const hint = (lines: [string, number][]) => {
       ctx.font = `600 ${fs * 0.8}px ui-monospace, "SF Mono", Menlo, monospace`;
       ctx.textAlign = inward;
       lines.forEach(([text, a], i) => {
         ctx.fillStyle = `rgba(235,242,255,${a})`;
-        ctx.fillText(text, hintX, r * 1.7 + i * fs * 1.15);
+        ctx.fillText(text, hintX, hintY + i * fs * 1.15);
       });
     };
 
@@ -631,12 +660,73 @@ export class WaveformRenderer {
     ctx.restore();
   }
 
+  /** Bar labels: name centered above the filter cap, status centered below the loop cap. */
+  private drawBarLabels(ctx: CanvasRenderingContext2D, obj: HoloObject, H: number, vis: VisualState, bright: RGB, u: number): void {
+    const ch = ctx.canvas.height;
+    const fs = u * 11;
+    const capSpan = (CAP_GAP + CAP_RADIUS) * ch;
+    ctx.font = `600 ${fs}px ui-monospace, "SF Mono", Menlo, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    setLetterSpacing(ctx, `${(fs * 0.1).toFixed(1)}px`);
+    ctx.fillStyle = rgba(bright, 0.9);
+    ctx.fillText(obj.label.toUpperCase(), 0, -H / 2 - capSpan - CAP_RADIUS * ch - fs * 0.9);
+    const status = statusText(obj);
+    const text = [status, performanceText(obj)].filter(Boolean).join(' · ');
+    const alpha = text ? 0.9 : Math.max(vis.hover, vis.grab) * 0.8;
+    if (alpha > 0.02 && text) {
+      ctx.font = `600 ${fs * 0.9}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.fillStyle = `rgba(230,236,255,${alpha.toFixed(3)})`;
+      ctx.fillText(text, 0, H / 2 + capSpan + CAP_RADIUS * ch + fs);
+    }
+    setLetterSpacing(ctx, '0px');
+  }
+
+  /**
+   * Locked stems are vertical faders, like the decks screen's stem bars: the
+   * capsule fills from the bottom to the volume, with a level line. Brighter
+   * (and labelled) while a hand is setting it.
+   */
+  private drawVolumeFill(ctx: CanvasRenderingContext2D, obj: HoloObject, W: number, H: number, base: RGB, u: number): void {
+    const vol = obj.volumeAdjust ?? obj.audio.volume;
+    const active = obj.volumeAdjust !== null;
+    const top = H / 2 - H * vol;
+    ctx.save();
+    capsulePath(ctx, W, H);
+    ctx.clip();
+    const g = ctx.createLinearGradient(0, H / 2, 0, -H / 2);
+    g.addColorStop(0, rgba(base, active ? 0.32 : 0.14));
+    g.addColorStop(1, rgba(base, active ? 0.12 : 0.04));
+    ctx.fillStyle = g;
+    ctx.fillRect(-W / 2, top, W, H * vol);
+    ctx.strokeStyle = rgba(mixRgb(base, [255, 255, 255], 0.5), active ? 0.9 : 0.35);
+    ctx.lineWidth = u * (active ? 2 : 1);
+    ctx.beginPath();
+    ctx.moveTo(-W / 2, top);
+    ctx.lineTo(W / 2, top);
+    ctx.stroke();
+    ctx.restore();
+    if (active) {
+      const fs = Math.max(u * 12, H * 0.22);
+      ctx.save();
+      ctx.font = `700 ${fs}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(240,244,255,0.95)';
+      ctx.shadowColor = rgba(base, 1);
+      ctx.shadowBlur = u * 8;
+      ctx.fillText(`VOL ${Math.round(vol * 100)}`, 0, 0);
+      ctx.restore();
+    }
+  }
+
   /** While pulling a loop out of a stem: a dashed ghost clip at the hand, tethered to the stem. */
   private drawClipGhost(ctx: CanvasRenderingContext2D, obj: HoloObject, vis: VisualState): void {
     const { width: cw, height: ch } = ctx.canvas;
     const u = ch / 720;
     const at = viewToPixels(obj.clipPreview!, cw, ch);
-    const cap = viewToPixels({ x: obj.position.x + capOffset(obj, 'loop') / (cw / ch), y: obj.position.y }, cw, ch);
+    const lc = capCenter(obj, 'loop');
+    const cap = viewToPixels({ x: obj.position.x + lc.dx / (cw / ch), y: obj.position.y + lc.dy }, cw, ch);
     const base = desaturate(hexToRgb(obj.color), 0.7 * vis.silent);
     const bright = mixRgb(base, [255, 255, 255], 0.5);
     const W = CLIP_GHOST.x * 2 * ch;
@@ -871,14 +961,21 @@ function readout(obj: HoloObject): string {
 }
 
 /** Pill-shaped path centered on the origin. */
+/** Pill centered on the origin; works lying (W > H) or standing (H > W). */
 function capsulePath(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-  const r = H / 2;
+  const r = Math.min(W, H) / 2;
+  const hw = W / 2 - r;
+  const hh = H / 2 - r;
   ctx.beginPath();
-  ctx.moveTo(-W / 2 + r, -r);
-  ctx.lineTo(W / 2 - r, -r);
-  ctx.arc(W / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2);
-  ctx.lineTo(-W / 2 + r, r);
-  ctx.arc(-W / 2 + r, 0, r, Math.PI / 2, (3 * Math.PI) / 2);
+  ctx.moveTo(-hw, -H / 2);
+  ctx.lineTo(hw, -H / 2);
+  ctx.arc(hw, -hh, r, -Math.PI / 2, 0);
+  ctx.lineTo(W / 2, hh);
+  ctx.arc(hw, hh, r, 0, Math.PI / 2);
+  ctx.lineTo(-hw, H / 2);
+  ctx.arc(-hw, hh, r, Math.PI / 2, Math.PI);
+  ctx.lineTo(-W / 2, -hh);
+  ctx.arc(-hw, -hh, r, Math.PI, (3 * Math.PI) / 2);
   ctx.closePath();
 }
 

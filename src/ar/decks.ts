@@ -1,43 +1,42 @@
 import type { AudioStateSource } from '../audio/AudioCommands';
 import { parseId } from '../bridge/task1Adapter';
 import type { Point2 } from '../perception';
+import { DECK_COLORS, STEM_COLORS, STEM_LABELS } from '../decks/theme';
 import type { ChannelKey, DeckId } from '../shared/types';
-import { CAP_ROOM, createHoloObject, type HoloObjectInit } from './HoloObject';
+import { createHoloObject, type HoloObjectInit } from './HoloObject';
 import type { InteractionController } from './InteractionController';
 
 /**
- * Deck-aware layout for the shared two-deck engine: deck A's channels in a
- * column on the left, deck B's on the right, center left clear for you.
- * Each deck has its own color family so A's vocals and B's vocals never look alike.
+ * Deck-aware layout for the shared two-deck engine, mirroring the decks
+ * screen (Monitor 1): each deck's stems stand as vertical bars side by side,
+ * in the same order and the same colors as its stem faders. Deck A on the
+ * left, deck B on the right, center left clear for you.
  */
 
 const CHANNEL_ORDER: ChannelKey[] = ['vocals', 'drums', 'bass', 'instrumental', 'full'];
-const LABELS: Record<ChannelKey, string> = {
-  vocals: 'Vocals',
-  drums: 'Drums',
-  bass: 'Bass',
-  instrumental: 'Music',
-  full: 'Song',
-};
-const COLORS: Record<DeckId, Record<ChannelKey, string>> = {
-  A: { vocals: '#b47cff', drums: '#ff5e62', bass: '#2ee6ff', instrumental: '#ffc857', full: '#8fa8ff' },
-  B: { vocals: '#ff7ad9', drums: '#ff9f43', bass: '#3dffa8', instrumental: '#fff36b', full: '#ffb3e6' },
-};
 const EDGE_MARGIN = 0.04;
+/** Bar size and spacing, view-height units. */
+const BAR_HALF = { x: 0.05, y: 0.16 };
+const FULL_HALF = { x: 0.06, y: 0.19 };
+const BAR_PITCH = 0.135;
+const BARS_Y = 0.52;
 
-/** Where a deck channel sits by default. */
+/** Colors shared with the decks screen: stems keep one color everywhere; a full mix takes its deck's color. */
+export function channelColor(deck: DeckId, channel: ChannelKey): string {
+  return channel === 'full' ? DECK_COLORS[deck] : STEM_COLORS[channel];
+}
+
+/** Where a deck channel's bar stands. Bars run left to right in the decks screen's order on both sides. */
 export function deckSlot(aspect: number, deck: DeckId, index: number, count: number): { position: Point2; halfSize: Point2 } {
-  const halfW = Math.min(0.18, 0.12 * aspect);
-  const halfH = count > 1 ? 0.045 : 0.065;
-  const sideX = (EDGE_MARGIN + halfW + CAP_ROOM) / aspect;
-  const x = deck === 'A' ? sideX : 1 - sideX;
-  const y = count === 1 ? 0.45 : 0.2 + (0.6 * index) / (count - 1);
-  return { position: { x, y }, halfSize: { x: halfW, y: halfH } };
+  const half = count > 1 ? BAR_HALF : FULL_HALF;
+  const fromEdge = EDGE_MARGIN + BAR_PITCH / 2 + (deck === 'A' ? index : count - 1 - index) * BAR_PITCH;
+  const x = deck === 'A' ? fromEdge / aspect : 1 - fromEdge / aspect;
+  return { position: { x, y: BARS_Y }, halfSize: { ...half } };
 }
 
 /** Label shown on a deck channel: `A · VOCALS`, or the song title for a full mix. */
 export function channelLabel(deck: DeckId, channel: ChannelKey, title?: string | null): string {
-  const name = channel === 'full' && title ? truncate(title, 22) : LABELS[channel];
+  const name = channel === 'full' ? (title ? truncate(title, 14) : 'Song') : STEM_LABELS[channel];
   return `${deck} · ${name}`;
 }
 
@@ -78,8 +77,12 @@ export function syncDeckStems(
         return;
       }
       const slot = deckSlot(aspect, deck, i, chans.length);
-      const init: HoloObjectInit = { id, label, color: COLORS[deck][ch], ...slot };
-      interaction.addObject(createHoloObject(init));
+      const init: HoloObjectInit = { id, label, color: channelColor(deck, ch), ...slot };
+      const obj = createHoloObject(init);
+      // Deck stems stand in place like the decks screen's faders: grab + move up/down = volume.
+      obj.locked = true;
+      obj.vertical = true;
+      interaction.addObject(obj);
     });
   }
 }

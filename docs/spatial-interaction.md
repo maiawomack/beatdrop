@@ -36,10 +36,11 @@ Every gesture uses a **closed fist** (the calibrated grab, see below). New contr
 
 | Gesture | Where | Effect | Audio command |
 | --- | --- | --- | --- |
-| Fist + move | stem body | Reposition (layout only) | none |
+| Fist + move up/down | deck stem (locked in its column) | Volume, like the decks screen's vertical stem faders: 0.02 dead zone, then 0.4 view-height = full range, rate-limited. The stem fills like a bar and shows `VOL n` | `setVolume` |
+| Fist + move | loop clip | Reposition (clips float freely; deck stems never move) | none |
 | Quick fist-tap (< 280 ms, no movement) | stem body | Toggle mute | `setMute` |
 | Release while moving fast | stem body | Flick: the stem glides, bounces, never overlaps | none |
-| Second fist on a held stem, then pull apart or push together | stem body | Stretch FX; persists after release | `setFx` |
+| Second fist on a held stem, then pull apart or push together **vertically** | stem body | Stretch: the stem grows taller (echo FX); persists after release. Sideways spread does nothing on deck stems | `setFx` |
 | One stem per hand, then pull apart or bring together | two stems | Isolate the pair: other stems duck, then restore | `setVolume` (others) |
 | Fist on the **loop cap**, move up/down, then open | ◯ left cap | Choose OFF → 1 → 2 → 4 → 8 beats (one step per 0.06 view-height); the loop engages on release | `setLoop` |
 | Tap on the loop cap | ◯ left cap | Toggle a 4-beat loop on / off | `setLoop` |
@@ -157,7 +158,7 @@ All of it uses `setTargetAtTime` automation, so there are no clicks.
 The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared two-deck engine (`src/audio/AudioEngine.ts`, Task 1). Every gesture changes the songs playing on it.
 
 - **Loading songs:** `/` opens the song search (the library in `mp3/`). Enter loads deck A and Shift+Enter loads deck B. A song you load starts playing by itself if nothing else is.
-- **Holograms per deck:** deck A's channels sit in the left column and deck B's in the right, in two colour families. A separated track shows one hologram per stem (Vocals, Drums, Bass, Music). A full mix (every library song until it's run through stem separation) shows one hologram, labelled with the song title.
+- **Holograms per deck:** each deck's stems stand as vertical bars, the way the decks screen shows its stem faders: deck A on the left, deck B on the right, in the decks screen's order (Vocals, Drums, Bass, Inst) and its colours (`STEM_COLORS` from `src/decks/theme.ts`, so a stem looks the same on both monitors). A full mix (every library song until it's split) is one bar in its deck's colour, labelled with the song title. Each bar has its filter knob above and its loop ring below. Bars are locked in place: grab and move up/down for volume (the bar fills like a fader), two hands apart vertically for echo.
 - **Adapter:** `src/bridge/task1Adapter.ts` translates spatial commands into engine commands, and engine state back into the spatial view (ids `A:vocals`, `A:full`, clips `A:full~1`).
 
 | Spatial gesture | Engine command | Scope |
@@ -189,16 +190,23 @@ These are additive: existing commands and state behave exactly as before. **Siyo
 - **Getters:** `getEnvelope`, `getChannelLevel`, `getClipLevel` and `getClipPositionSec`, for the holograms.
 - **Tempo:** a library song loaded as a full mix has no BPM, so the engine estimates BPM and beat phase on load (`src/audio/tempo.ts`, about 0.2 s). It found 128 for "Summer" and 87 for "Rude Boy". Bars are counted from the first detected beat; downbeats aren't detected. The status bar marks estimated BPMs with `~`. With no BPM, loops and clips are refused and drops fire immediately ("NO BEAT GRID").
 
-### Monitor 1
+### Both monitors share one engine (`src/integration/engineSync.ts`)
 
-The decks page (`/`, Task 3) still creates its own stand-in engine (`src/engine/standInEngine.ts`, on the Task 3 contract in `src/shared/contracts.ts`). It is **not yet connected** to the engine in the spatial window. Until it is, open only one of the two pages with audio, or you'll hear two engines.
+- **The decks screen (`/`, Monitor 1) owns the audio.** It calls `hostEngine(engine)` in `src/decks/main.tsx`.
+- **The spatial page (`/spatial.html`, Monitor 2) mirrors it.** It uses a `RemoteEngine`, so no audio plays in the spatial window and nothing plays twice.
+- **What travels between them:**
+  - Commands go from the spatial page to the decks screen.
+  - The decks screen sends back engine state on every change.
+  - About 30 times a second while playing, it sends positions and levels.
+  - Waveform envelopes are sent once per track, on request.
+- **Both directions work.** Load a song or move a fader on the decks screen and the holograms follow. Grab, twist, loop, clip or drop on the spatial page and the decks screen's engine (and its UI) changes.
+- **Standalone fallback.** If no decks screen answers within about 1.2 s, the spatial page runs its own engine (status: STANDALONE · NO DECKS SCREEN), so you can test gestures alone. It hands over automatically when the decks screen opens; songs loaded in standalone mode stop at that point.
+- **Status indicators** (top right of the spatial page):
+  - `⇄ DECKS`: connected.
+  - `🔇 CLICK THE DECKS SCREEN ONCE TO ENABLE AUDIO`: browsers only start audio after a click or key press in the window that plays it.
+  - `⚠ DECKS SCREEN CLOSED`: the decks screen has gone away.
 
-Connecting them needs three things:
-1. One host window for `AudioEngine`.
-2. A BroadcastChannel client.
-3. Agreement between Tasks 1 and 3 on a single contract: `shared/types.ts` vs `shared/contracts.ts`.
-
-`src/integration/broadcastSync.ts` is the earlier proposal on the spatial contract and is not used by the page right now.
+**Running both:** open both pages in the **same browser** from the **same address**: `http://127.0.0.1:5173/` and `http://127.0.0.1:5173/spatial.html`. Note that `localhost` and `127.0.0.1` count as different sites, so the pages can't talk across them. Then drag each window to its own monitor.
 
 ## Tests
 
@@ -211,11 +219,14 @@ Connecting them needs three things:
   - filter: bounds; hold; tap reset; glitch rate limit; untracked freeze
   - hand state machine
 - `src/audio/transport.test.ts`: beat/bar boundaries, wrap-around, loop regions, loop positions.
-- `src/integration/broadcastSync.test.ts`:
-  - initial state sync
-  - Monitor 1 → engine → Monitor 1 round trip
-  - spatial → Monitor 1 mirroring
+- `src/integration/engineSync.test.ts`:
+  - spatial ↔ decks screen state and commands, in both directions
+  - live positions and levels, and waveform envelopes on request
+  - starting audio from the other window
+  - standalone fallback
   - duplicate host detection
+- `src/bridge/task1Adapter.test.ts`: the gesture → engine command mapping.
+- `src/audio/tempo.test.ts`: BPM and beat-phase estimation.
 
 Replay a debug recording through the current controller:
 
@@ -223,7 +234,7 @@ Replay a debug recording through the current controller:
 
 ### Manual test (spatial monitor)
 
-1. `npm run dev`, open `http://127.0.0.1:5173/spatial.html`, allow the camera, click **START SESSION**, then pick a song (Enter → deck A) and press Space if it isn't playing.
+1. `npm run dev`. Open `http://127.0.0.1:5173/` (decks screen) and click anywhere on it once. Then open `http://127.0.0.1:5173/spatial.html` in the same browser, allow the camera, click **START SESSION**, and pick a song (Enter → deck A). It shows up on both screens.
 2. **Loop:** fist on the ◯ cap left of DRUMS. Raise your hand two steps until the cap shows "2", then open it.
    - Within a beat, the drums repeat a half-second phrase.
    - The waveform shows repeating loop marks.
