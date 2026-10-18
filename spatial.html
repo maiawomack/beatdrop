@@ -42,6 +42,12 @@
                backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
       #start:hover { box-shadow: 0 0 36px rgba(80, 180, 255, .6), inset 0 0 16px rgba(80, 180, 255, .25); }
       #start[hidden] { display: none; }
+      #fullscreen { position: absolute; right: 14px; bottom: 14px; z-index: 4; cursor: pointer;
+                    font: 600 10px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .2em;
+                    color: rgba(220, 238, 255, .85); background: rgba(8, 14, 32, .5);
+                    border: 1px solid rgba(120, 200, 255, .35); border-radius: 999px; padding: 7px 14px;
+                    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #fullscreen:hover { border-color: rgba(120, 200, 255, .7); }
       #search { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(560px, 90%); }
       #search[hidden] { display: none; }
     </style>
@@ -54,11 +60,12 @@
       <div id="brand">BEATDROP <span>// SPATIAL MIX</span></div>
       <div id="status"></div>
       <div id="search" hidden></div>
-      <div id="hint">/ SEARCH SONGS (ENTER = DECK A · SHIFT+ENTER = DECK B) · SPACE PLAY · A/B DECK · ←/→ CROSSFADE<br>
+      <div id="hint">/ SEARCH SONGS (ENTER = DECK A · SHIFT+ENTER = DECK B) · SPACE PLAY · A/B DECK · ←/→ CROSSFADE · F FULLSCREEN<br>
         FIST OUT TO YOUR SIDE ↕ = TEMPO (LEFT = A, RIGHT = B) · 1–2 FINGERS UP + SLIDE = CROSSFADE ◀▶<br>
         OPEN PALM ON A SIDE, TURN IT LIKE A STEERING WHEEL = SCRATCH THAT SIDE'S DECK · FINGERTIPS DOWN = LIFT TO BUILD, LET GO TO DROP</div>
       <button id="start" hidden>▶ START SESSION</button>
       <div id="hud" class="hidden">Starting camera…</div>
+      <button id="fullscreen" title="Full screen (F)">⛶ FULLSCREEN</button>
     </div>
     <script type="module" src="/src/spatial/main.ts"></script>
   </body>

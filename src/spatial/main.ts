@@ -36,6 +36,21 @@ const video = document.getElementById('webcam') as HTMLVideoElement;
 const canvas = document.getElementById('overlay') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
 const startButton = document.getElementById('start') as HTMLButtonElement;
+const fullscreenButton = document.getElementById('fullscreen') as HTMLButtonElement;
+
+/** Full screen for the camera view (button, or F); the label follows the actual state. */
+function toggleFullscreen(): void {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen().catch(() => undefined);
+}
+fullscreenButton.addEventListener('click', (e) => {
+  toggleFullscreen();
+  fullscreenButton.blur(); // so Space / keys keep going to the page
+  e.stopPropagation();
+});
+document.addEventListener('fullscreenchange', () => {
+  fullscreenButton.textContent = document.fullscreenElement ? '⛶ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+});
 const hint = document.getElementById('hint') as HTMLDivElement;
 const status = document.getElementById('status') as HTMLDivElement;
 const searchBox = document.getElementById('search') as HTMLDivElement;
@@ -381,6 +396,7 @@ async function main(): Promise<void> {
       if (key === 'p') recorder.label = 'pinch';
       if (key === 'f') recorder.label = 'fist';
     }
+    if (key === 'f' && !e.repeat && !recorder.recording) toggleFullscreen();
     if (key === 'r') {
       const ids = stems.filter((o) => !o.clipOf).map((o) => o.id);
       interaction.resetLayout(deckPositions(video.videoWidth / video.videoHeight, ids));
