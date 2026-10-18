@@ -16,3 +16,5 @@ __pycache__/
 # generated locally (the library builds the index from the manifests).
 /mp3/.stems/index.json
 /mp3/.stems/.*
+/public/stems/*
+!/public/stems/README.md

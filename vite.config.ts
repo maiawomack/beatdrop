@@ -14,9 +14,11 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      // Two pages: the decks interface (Monitor 1) and Task 1's engine harness.
+      // Pages: the decks interface (Monitor 1), the spatial workstation (Monitor 2),
+      // and Task 1's engine harness.
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        spatial: fileURLToPath(new URL('./spatial.html', import.meta.url)),
         harness: fileURLToPath(new URL('./harness.html', import.meta.url)),
       },
     },
