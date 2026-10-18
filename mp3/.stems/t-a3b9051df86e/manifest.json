@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-a3b9051df86e",
+  "title": "Tumblr Girls ft. Christoph Andersson",
+  "artist": "G-Eazy",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 11361793,
+  "durationSec": 257.637,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 257.637,
+  "bpm": 81.34,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.3251,
+  "gainDb": -1.49,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -15.38,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -7.5,
+      "rmsDb": -25.61
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.42,
+      "rmsDb": -21.38
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.93,
+      "rmsDb": -18.61
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -4.95,
+      "rmsDb": -24.92
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

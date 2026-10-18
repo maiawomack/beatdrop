@@ -1,0 +1,365 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 35602958,
+ "matchedTitle": "what's my name?",
+ "matchedArtist": "rihanna",
+ "matchedDurationSec": 231.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 0.39,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 2.45,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 6.54,
+   "text": ""
+  },
+  {
+   "timeSec": 9.66,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 12.01,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 14.48,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 16.97,
+   "text": "(Uh) What's My Name, What's My Name?"
+  },
+  {
+   "timeSec": 19.39,
+   "text": "Yeah, I heard you good with them soft lips"
+  },
+  {
+   "timeSec": 22.41,
+   "text": "Yeah, you know word of mouth"
+  },
+  {
+   "timeSec": 24.6,
+   "text": "The square root of 69 is 8 some, right?"
+  },
+  {
+   "timeSec": 27.52,
+   "text": "'Cause I've been tryna work it out, ow"
+  },
+  {
+   "timeSec": 30.09,
+   "text": "Good weed, white wine"
+  },
+  {
+   "timeSec": 32.06,
+   "text": "Uh, I come alive in the night time, yeah"
+  },
+  {
+   "timeSec": 34.73,
+   "text": "Okay, away we go"
+  },
+  {
+   "timeSec": 36.73,
+   "text": "Only thing we have on is the radio"
+  },
+  {
+   "timeSec": 39.85,
+   "text": "Oh, let it play"
+  },
+  {
+   "timeSec": 41.2,
+   "text": "Say you gotta leave but I know you wanna stay"
+  },
+  {
+   "timeSec": 43.61,
+   "text": "You just waiting on the traffic jam to finish, girl"
+  },
+  {
+   "timeSec": 46.14,
+   "text": "The things we could do in twenty minutes girl"
+  },
+  {
+   "timeSec": 48.5,
+   "text": "Say my name, say my name, wear it out"
+  },
+  {
+   "timeSec": 51.04,
+   "text": "It's getting hot, crack a window, air it out"
+  },
+  {
+   "timeSec": 53.32,
+   "text": "I can get you through a mighty long day"
+  },
+  {
+   "timeSec": 55.47,
+   "text": "Soon as you go the text that I write is gonna say"
+  },
+  {
+   "timeSec": 57.71,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 60.03,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 62.42,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 64.83,
+   "text": "What's My Name, What's My Name?"
+  },
+  {
+   "timeSec": 67.01,
+   "text": "Not everybody knows how to work my body"
+  },
+  {
+   "timeSec": 70.84,
+   "text": "Knows how to make me want it"
+  },
+  {
+   "timeSec": 73.28,
+   "text": "But boy, you stay up on it"
+  },
+  {
+   "timeSec": 76.2,
+   "text": "You got that something"
+  },
+  {
+   "timeSec": 78.28,
+   "text": "That keeps me so off balance"
+  },
+  {
+   "timeSec": 80.68,
+   "text": "Baby, you're a challenge"
+  },
+  {
+   "timeSec": 82.95,
+   "text": "Let's explore your talent"
+  },
+  {
+   "timeSec": 86.34,
+   "text": "Hey boy, I really wanna see if you can go downtown with a girl like me"
+  },
+  {
+   "timeSec": 91.29,
+   "text": "Hey boy, I really wanna be with you 'cause you just my type"
+  },
+  {
+   "timeSec": 94.94,
+   "text": "Oh na na na na"
+  },
+  {
+   "timeSec": 96.41,
+   "text": "I need a boy to take it over"
+  },
+  {
+   "timeSec": 98.69,
+   "text": "Looking for a guy to put in work uh"
+  },
+  {
+   "timeSec": 101.35,
+   "text": "Ohh-oh-oh, ohh-oh-oh"
+  },
+  {
+   "timeSec": 105.52,
+   "text": "Hey boy, I really wanna see if you can go downtown with a girl like me"
+  },
+  {
+   "timeSec": 110.22,
+   "text": "Hey boy, I really wanna be with you 'cause you just my type"
+  },
+  {
+   "timeSec": 114.14,
+   "text": "Oh na na na na"
+  },
+  {
+   "timeSec": 115.78,
+   "text": "I need a boy to take it over"
+  },
+  {
+   "timeSec": 117.84,
+   "text": "Looking for a guy to put in work uh"
+  },
+  {
+   "timeSec": 120.28,
+   "text": "Ohh-oh-oh, ohh-oh-oh"
+  },
+  {
+   "timeSec": 124.94,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 127.24,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 129.59,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 132.09,
+   "text": "What's my name, What's My Name?"
+  },
+  {
+   "timeSec": 134.46,
+   "text": "Baby, you got me"
+  },
+  {
+   "timeSec": 135.74,
+   "text": "And ain't nowhere that I'd be"
+  },
+  {
+   "timeSec": 138.01,
+   "text": "Than with your arms around me"
+  },
+  {
+   "timeSec": 140.64,
+   "text": "Back and forth you rock me"
+  },
+  {
+   "timeSec": 143.66,
+   "text": "So I surrender"
+  },
+  {
+   "timeSec": 145.25,
+   "text": "To every word you whisper"
+  },
+  {
+   "timeSec": 147.76,
+   "text": "Every door you enter"
+  },
+  {
+   "timeSec": 150.0,
+   "text": "I, will let you in"
+  },
+  {
+   "timeSec": 153.47,
+   "text": "Hey boy, I really wanna see if you can go downtown with a girl like me"
+  },
+  {
+   "timeSec": 158.4,
+   "text": "Hey boy, I really wanna be with you 'cause you just my type"
+  },
+  {
+   "timeSec": 162.19,
+   "text": "Oh na na na na"
+  },
+  {
+   "timeSec": 163.66,
+   "text": "I need a boy to take it over"
+  },
+  {
+   "timeSec": 165.98,
+   "text": "Looking for a guy to put in work uh"
+  },
+  {
+   "timeSec": 168.27,
+   "text": "Ohh-oh-oh, ohh-oh-oh"
+  },
+  {
+   "timeSec": 172.72,
+   "text": "You're so amazing, you took the time to figure me out"
+  },
+  {
+   "timeSec": 178.12,
+   "text": "That's why you take me, way past the point of turnin' me on"
+  },
+  {
+   "timeSec": 182.97,
+   "text": "You 'bout to break me"
+  },
+  {
+   "timeSec": 184.76,
+   "text": "I swear you got me losing my mind"
+  },
+  {
+   "timeSec": 192.14,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 194.56,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 198.57,
+   "text": ""
+  },
+  {
+   "timeSec": 201.51,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 203.96,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 206.38,
+   "text": "Oh na na, What's My Name?"
+  },
+  {
+   "timeSec": 209.16,
+   "text": "What's My Name, What's My Name?"
+  },
+  {
+   "timeSec": 211.25,
+   "text": "Hey boy, I really wanna see if you can go downtown with a girl like me"
+  },
+  {
+   "timeSec": 215.93,
+   "text": "Hey boy, I really wanna be with you 'cause you just my type"
+  },
+  {
+   "timeSec": 219.84,
+   "text": "Oh na na na na"
+  },
+  {
+   "timeSec": 221.3,
+   "text": "I need a boy to take it over"
+  },
+  {
+   "timeSec": 223.48,
+   "text": "Looking for a guy to put in work uh"
+  },
+  {
+   "timeSec": 225.74,
+   "text": "Ohh-oh-oh, ohh-oh-oh"
+  },
+  {
+   "timeSec": 230.59,
+   "text": "Hey boy, I really wanna see if you can go downtown with a girl like me"
+  },
+  {
+   "timeSec": 235.13,
+   "text": "Hey boy, I really wanna be with you 'cause you just my type"
+  },
+  {
+   "timeSec": 238.88,
+   "text": "Oh na na na na"
+  },
+  {
+   "timeSec": 240.41,
+   "text": "I need a boy to take it over"
+  },
+  {
+   "timeSec": 242.66,
+   "text": "Looking for a guy to put in work uh"
+  },
+  {
+   "timeSec": 245.35,
+   "text": "Ohh-oh-oh, ohh-oh-oh"
+  },
+  {
+   "timeSec": 249.56,
+   "text": ""
+  }
+ ],
+ "plain": "Oh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\n(Uh) What's My Name, What's My Name?\n\nYeah, I heard you good with them soft lips\nYeah, you know word of mouth\nThe square root of 69 is 8 some, right?\n'Cause I've been tryna work it out, ow\nGood weed, white wine\nUh, I come alive in the night time, yeah\nOkay, away we go\nOnly thing we have on is the radio\nOh, let it play\nSay you gotta leave but I know you wanna stay\nYou just waiting on the traffic jam to finish, girl\nThe things we could do in twenty minutes girl\nSay my name, say my name, wear it out\nIt's getting hot, crack a window, air it out\nI can get you through a mighty long day\nSoon as you go the text that I write is gonna say\n\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nWhat's My Name, What's My Name?\n\nNot everybody knows how to work my body\nKnows how to make me want it\nBut boy, you stay up on it\nYou got that something\nThat keeps me so off balance\nBaby, you're a challenge\nLet's explore your talent\n\nHey boy, I really wanna see if you can go downtown with a girl like me\nHey boy, I really wanna be with you 'cause you just my type\nOh na na na na\nI need a boy to take it over\nLooking for a guy to put in work uh\nOhh-oh-oh, ohh-oh-oh\nHey boy, I really wanna see if you can go downtown with a girl like me\nHey boy, I really wanna be with you 'cause you just my type\nOh na na na na\nI need a boy to take it over\nLooking for a guy to put in work uh\nOhh-oh-oh, ohh-oh-oh\n\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nWhat's my name, What's My Name?\n\nBaby, you got me\nAnd ain't nowhere that I'd be\nThan with your arms around me\nBack and forth you rock me\nSo I surrender\nTo every word you whisper\nEvery door you enter\nI, will let you in\n\nHey boy, I really wanna see if you can go downtown with a girl like me\nHey boy, I really wanna be with you 'cause you just my type\nOh na na na na\nI need a boy to take it over\nLooking for a guy to put in work uh\nOhh-oh-oh, ohh-oh-oh\n\nYou're so amazing, you took the time to figure me out\nThat's why you take me, way past the point of turnin' me on\nYou 'bout to break me\nI swear you got me losing my mind\n\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nOh na na, What's My Name?\nWhat's My Name, What's My Name?\n\nHey boy, I really wanna see if you can go downtown with a girl like me\nHey boy, I really wanna be with you 'cause you just my type\nOh na na na na\nI need a boy to take it over\nLooking for a guy to put in work uh\nOhh-oh-oh, ohh-oh-oh\nHey boy, I really wanna see if you can go downtown with a girl like me\nHey boy, I really wanna be with you 'cause you just my type\nOh na na na na\nI need a boy to take it over\nLooking for a guy to put in work uh\nOhh-oh-oh, ohh-oh-oh"
+}

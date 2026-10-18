@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-04ebc7763592",
+  "title": "Beautiful Mistakes ft. Megan Thee Stallion",
+  "artist": "Maroon 5",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9574522,
+  "durationSec": 217.1093,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 217.1093,
+  "bpm": 99.0,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.4876,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.33,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.99,
+      "rmsDb": -20.35
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.99,
+      "rmsDb": -20.59
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -6.24,
+      "rmsDb": -18.22
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -5.99,
+      "rmsDb": -24.75
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

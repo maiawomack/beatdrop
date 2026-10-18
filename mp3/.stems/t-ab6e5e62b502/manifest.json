@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-ab6e5e62b502",
+  "title": "Want To Want Me",
+  "artist": "Jason Derulo",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9242625,
+  "durationSec": 209.5833,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 209.5833,
+  "bpm": 114.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.2844,
+  "gainDb": -2.77,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -15.02,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.86,
+      "rmsDb": -20.99
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.86,
+      "rmsDb": -19.93
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -6.97,
+      "rmsDb": -21.87
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.47,
+      "rmsDb": -24.06
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

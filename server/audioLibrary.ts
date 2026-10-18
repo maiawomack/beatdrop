@@ -21,6 +21,7 @@ import type { Plugin } from 'vite';
  *   GET /api/library?q=<search>                 → { tracks: TrackInfo[] }
  *   GET /api/library/audio/<id>                 → full mix (Range supported)
  *   GET /api/library/stems/<stems id>/<file>    → manifest.json, waveform.json, lyrics.json, stem audio
+ *   GET /api/library/stems/index.json           → every split track (built from the manifests on each request)
  */
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -74,6 +75,9 @@ export function audioLibrary(options: { libraryDir: string; stemsDir: string }):
   };
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL, parts: string[]): Promise<void> {
+    if (parts[2] === 'stems' && parts.length === 4 && parts[3] === 'index.json') {
+      return sendJson(res, 200, await stemsIndex(stemsDir));
+    }
     if (parts[2] === 'stems' && parts.length === 5) {
       const [, , , stemsId, file] = parts as [string, string, string, string, string];
       if (!SAFE_SEGMENT.test(stemsId) || !SAFE_SEGMENT.test(file)) return sendJson(res, 400, { error: 'Bad path' });
@@ -153,6 +157,32 @@ async function scan(libraryDir: string, stemsDir: string): Promise<LibraryEntry[
     entries.push({ id, fileName, absPath, title, artists, stemsId, bpm });
   }
   return entries;
+}
+
+/**
+ * Same shape as the index.json the stem pipeline writes, but generated from the manifests,
+ * so the committed stems folder needs no shared index file that teammates would conflict on.
+ */
+async function stemsIndex(stemsDir: string) {
+  const dirents = await readdir(stemsDir, { withFileTypes: true }).catch(() => []);
+  const tracks: Record<string, unknown>[] = [];
+  for (const d of dirents) {
+    if (!d.isDirectory() || d.name.startsWith('.') || !SAFE_SEGMENT.test(d.name)) continue;
+    try {
+      const m = JSON.parse(await readFile(path.join(stemsDir, d.name, 'manifest.json'), 'utf8')) as Record<string, unknown>;
+      tracks.push({
+        id: d.name,
+        title: m.title,
+        artist: m.artist,
+        bpm: m.bpm,
+        durationSec: m.durationSec,
+        manifest: `${d.name}/manifest.json`,
+      });
+    } catch {
+      // not a finished track (still being written, or not a stems folder)
+    }
+  }
+  return { version: 1, tracks };
 }
 
 async function walk(dir: string): Promise<string[]> {

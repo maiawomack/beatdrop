@@ -17,25 +17,27 @@ Vite server ([`server/audioLibrary.ts`](../server/audioLibrary.ts)), so use `npm
 - Name them `Artist - Title.mp3`. That's where the artist and title come from
   (`Artist A, Artist B - Title` and `A & B - Title` give multiple artists).
 - The folder is rescanned on every search, so new files appear without restarting.
-- `mp3/` and `public/stems/` are gitignored. Purchased music is licensed to you, so don't
-  commit it; each teammate keeps their own copies.
+- `mp3/` is committed, together with its pre-split stems in `mp3/.stems/` (see Stems below).
+  Purchased music is licensed to you; keep the repository private.
 
 Each file gets an id from its path, e.g. `mp3/Calvin Harris - Summer.mp3` → `calvin-harris-summer`.
 
 ## Stems
 
 Stems come from the stem pipeline in [`tools/stems/`](../tools/stems/README.md) (Task 5), which
-writes `public/stems/<stems id>/manifest.json` plus the stem files. The engine loads them with
-that pipeline's `loadTrack()` from [`src/stems/`](../src/stems/).
+writes `mp3/.stems/<stems id>/manifest.json` plus the stem files. That folder is committed with
+the songs, so a fresh clone already has them. The engine loads them with that pipeline's
+`loadTrack()` from [`src/stems/`](../src/stems/).
 
-To separate a library song, either:
+To separate library songs, either:
 
-- **From the app:** start `tools/stems/separation_server.py`, then click **Separate** on the
-  search result. The server names the output `t-<hash of the file>`, and the library computes
-  the same hash to find it.
-- **From the command line:** `prepare_stems.py separate "mp3/Calvin Harris - Summer.mp3" --id calvin-harris-summer`.
-  Without `--id`, the pipeline names the folder after the title, which matches the library id
-  for files whose tags have no title.
+- **All at once:** `.venv/bin/python tools/stems/sync_library.py` splits every song in `mp3/`
+  that has no stems yet (`--watch --only-new` keeps splitting songs as they're added).
+- **From the app:** start `tools/stems/separation_server.py`, then click **Split** on a search
+  result or load the song and use **Split into stems**. Uploaded files are saved into `mp3/`.
+
+Either way the output folder is `t-<hash of the file>`, and the library computes the same hash
+to find it.
 
 When a track has stems, search shows a **stems** badge and loading it plays the four stems, so
 per-stem controls work and the deck's BPM comes from the manifest. Otherwise the deck plays the
@@ -80,4 +82,5 @@ same time, and every control works on both.
 |---|---|
 | `GET /api/library?q=<words>` | `{ tracks: TrackInfo[] }`. All words must match; empty lists everything |
 | `GET /api/library/audio/<id>` | the full-mix file (Range requests supported) |
-| `GET /api/library/stems/<stems id>/<file>` | files from `public/stems/<stems id>/` (manifest, waveform, lyrics, stems) |
+| `GET /api/library/stems/<stems id>/<file>` | files from `mp3/.stems/<stems id>/` (manifest, waveform, lyrics, stems) |
+| `GET /api/library/stems/index.json` | every split track, built from the manifests |

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-ab0cd47dffe7",
+  "title": "2 On ft. SchoolBoy Q",
+  "artist": "Tinashe",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10217473,
+  "durationSec": 231.6887,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 231.6887,
+  "bpm": 101.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.267,
+  "gainDb": -1.31,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.5,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -1.4,
+      "rmsDb": -21.02
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -1.4,
+      "rmsDb": -19.09
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.38,
+      "rmsDb": -19.43
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.29,
+      "rmsDb": -26.29
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

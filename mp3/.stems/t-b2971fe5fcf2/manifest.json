@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-b2971fe5fcf2",
+  "title": "How Deep Is Your Love",
+  "artist": "Calvin Harris, Disciples",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9381377,
+  "durationSec": 212.7296,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 212.7296,
+  "bpm": 122.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.1016,
+  "gainDb": -2.51,
+  "mixPeakDb": -1.72,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.88,
+      "rmsDb": -20.37
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.6,
+      "rmsDb": -18.19
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -3.51,
+      "rmsDb": -21.28
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.28,
+      "rmsDb": -23.74
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

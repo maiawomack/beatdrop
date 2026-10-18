@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-858029168046",
+  "title": "Nicole Kidman",
+  "artist": "AD\u00c9LA",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9759860,
+  "durationSec": 221.312,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 221.312,
+  "bpm": 141.0,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.0813,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.22,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.38,
+      "rmsDb": -19.72
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -1.83,
+      "rmsDb": -23.47
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -3.37,
+      "rmsDb": -17.61
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -5.79,
+      "rmsDb": -25.2
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

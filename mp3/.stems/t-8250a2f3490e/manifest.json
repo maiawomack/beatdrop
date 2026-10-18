@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-8250a2f3490e",
+  "title": "purple",
+  "artist": "Olivia Rodrigo",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10592511,
+  "durationSec": 240.193,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 240.193,
+  "bpm": 150.0,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.3077,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -15.17,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.37,
+      "rmsDb": -20.66
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.37,
+      "rmsDb": -22.34
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -7.34,
+      "rmsDb": -23.95
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.75,
+      "rmsDb": -21.27
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

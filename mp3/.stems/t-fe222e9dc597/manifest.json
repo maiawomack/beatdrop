@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-fe222e9dc597",
+  "title": "2 hands",
+  "artist": "Tate McRae",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8038913,
+  "durationSec": 182.2883,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 182.2883,
+  "bpm": 104.01,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.3338,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.85,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.83,
+      "rmsDb": -20.19
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.83,
+      "rmsDb": -22.65
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -6.56,
+      "rmsDb": -17.96
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.66,
+      "rmsDb": -24.32
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-5e81cbb837bb",
+  "title": "What's My Name ft. Drake",
+  "artist": "Rihanna",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10143233,
+  "durationSec": 230.0053,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 230.0053,
+  "bpm": 100.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.5863,
+  "gainDb": -3.08,
+  "mixPeakDb": -2.24,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.17,
+      "rmsDb": -18.76
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.17,
+      "rmsDb": -17.95
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -12.04,
+      "rmsDb": -40.81
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -7.05,
+      "rmsDb": -22.31
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

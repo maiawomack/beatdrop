@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-fb6a660bead9",
+  "title": "Clarity ft. Foxes",
+  "artist": "Zedd",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 11979265,
+  "durationSec": 271.6387,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 271.6387,
+  "bpm": 128.01,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.0668,
+  "gainDb": -3.26,
+  "mixPeakDb": -2.13,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.35,
+      "rmsDb": -20.33
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.35,
+      "rmsDb": -18.88
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -8.58,
+      "rmsDb": -24.91
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.35,
+      "rmsDb": -20.44
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

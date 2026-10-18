@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-9b69a28e33c4",
+  "title": "Sweet Home",
+  "artist": "Don Toliver",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8862027,
+  "durationSec": 200.953,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 200.953,
+  "bpm": 126.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.0056,
+  "gainDb": -2.69,
+  "mixPeakDb": -1.42,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.78,
+      "rmsDb": -19.27
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.78,
+      "rmsDb": -28.15
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -3.45,
+      "rmsDb": -16.92
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.08,
+      "rmsDb": -24.53
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
