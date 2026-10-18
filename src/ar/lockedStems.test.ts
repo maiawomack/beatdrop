@@ -150,11 +150,25 @@ describe('fader bars', () => {
     expect(drums.position).toEqual(home);
   });
 
-  it('a pinch deep inside the bar (far below its top) does not grab it', () => {
+  it('a pinch anywhere along the bar grabs it, and the drag is relative', () => {
     rig.frame();
-    const v = rig.stem('vocals'); // full volume: top of the fill is the top of the track
-    pinchAt('Left', { x: v.position.x, y: v.position.y + 0.15 });
-    expect(v.holders).toHaveLength(0);
+    const v = rig.stem('vocals'); // full volume: the top of the fill is at the top of the track
+    const p = { x: v.position.x, y: v.position.y + 0.15 }; // deep inside the bar
+    pinchAt('Left', p);
+    expect(v.holders).toEqual(['Left']);
+    drag('Left', p, { x: p.x, y: p.y + TRACK * 0.25 + 0.01 }, 15);
+    expect(rig.engine.stems.get('vocals')!.volume).toBeCloseTo(0.75, 2);
+  });
+
+  it('pinching a bar wins over the lift pose (reaching down to the bars never builds)', () => {
+    rig.frame();
+    const v = rig.stem('drums');
+    const p = { x: v.position.x, y: v.position.y };
+    const pinchLift = (phase: GesturePhase) => ({ ...pinch('Left', p, phase), lift: gesture(phase, p) });
+    rig.frame(pinchLift('start'));
+    for (let t = 0; t <= PINCH_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(pinchLift('held'));
+    expect(v.holders).toEqual(['Left']);
+    expect(rig.eventsOf('buildStart')).toHaveLength(0);
   });
 
   it('an empty bar can be pinched at the bottom, where its top is', () => {

@@ -41,6 +41,8 @@ export class DeckChannel {
   private readonly live: GainNode;
   /** Track position where the current scratch started (offsets are relative to it). */
   private scrubOrigin = 0;
+  /** The scratch voice is running a tape stop (brake), not a hand scratch. */
+  private braking = false;
   /** The scratch voice while a hand is on the record (scratchVoice.ts). */
   private scrub: { node: AudioWorkletNode; windowStart: number; sampleRate: number; pos: number } | null = null;
   private readonly clips = new Map<string, Clip>();
@@ -479,6 +481,33 @@ export class DeckChannel {
     this.scrub.node.port.postMessage({ type: 'target', pos: (this.scrubOrigin + offsetSec - this.scrub.windowStart) * this.scrub.sampleRate });
   }
 
+  /**
+   * Tape stop before a drop: the record winds down to a halt over about `sec` while the
+   * live sound keeps running muted underneath (so the drop lands in sync). Returns false
+   * if the deck isn't playing or is being scratched.
+   */
+  brake(sec: number): boolean {
+    if (this.scrub || !this._playing || !this.startScratch()) return false;
+    this.braking = true;
+    this.scrub!.node.port.postMessage({ type: 'brake', tc: Math.max(0.03, sec / 3) });
+    return true;
+  }
+
+  /** End a tape stop at context time `at`: the live sound slams back in. */
+  endBrake(at: number): void {
+    const scrub = this.scrub;
+    if (!scrub || !this.braking) return;
+    this.live.gain.setTargetAtTime(1, at, 0.002);
+    // The wound-down record keeps reporting its position (the records on screen slow down) until then.
+    setTimeout(() => {
+      if (this.scrub !== scrub) return;
+      this.scrub = null;
+      this.braking = false;
+      scrub.node.port.postMessage({ type: 'stop' });
+      scrub.node.disconnect();
+    }, Math.max(0, (at - this.ctx.currentTime) * 1000) + 30);
+  }
+
   /** Where the record is while a hand scratches it (what you hear), or null when not scratching. */
   scratchPosition(): number | null {
     if (!this.scrub) return null;
@@ -493,6 +522,7 @@ export class DeckChannel {
     if (!this.scrub) return;
     const { node } = this.scrub;
     this.scrub = null;
+    this.braking = false;
     node.port.postMessage({ type: 'release', spin: this.spin });
     this.live.gain.setTargetAtTime(1, this.ctx.currentTime, 0.02);
     setTimeout(() => node.disconnect(), 800); // fallback; normally on 'done'

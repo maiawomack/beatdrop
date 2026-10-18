@@ -78,6 +78,15 @@ const LIFT_DOWN_OFF = 0.2;
 const NOT_LIFT = 1.5;
 /** Fingertips bunched for the lift pose. */
 const LIFT_TIPS = [LM.THUMB_TIP, LM.INDEX_TIP, LM.MIDDLE_TIP] as const;
+/**
+ * Lift pose reach: how far the index and middle fingertips extend along the wrist ->
+ * knuckles direction, in wrist-to-knuckle lengths. The lift pose reaches well past the
+ * knuckles (~1.6-2); a fist curls them back behind the knuckles (< ~1.1), so a fist
+ * pointing down (the tempo fist) never reads as the lift pose. Hysteresis: engage above
+ * ON, stay above OFF.
+ */
+const LIFT_REACH_ON = 1.3;
+const LIFT_REACH_OFF = 1.15;
 /** Palm-down flatness (|vertical component of the palm normal|): engage above ON, stay until below OFF. */
 const FLAT_ON = 0.7;
 const FLAT_OFF = 0.5;
@@ -457,6 +466,7 @@ export class GestureProcessor {
     const pts = world.length >= 21 ? world : lms;
     const palm = dist3(pts[LM.WRIST], pts[LM.MIDDLE_MCP]);
     if (palm < 1e-6) return NOT_LIFT;
+    if (fingerReach(pts) < (active ? LIFT_REACH_OFF : LIFT_REACH_ON)) return NOT_LIFT; // curled: a fist
     let spread = 0;
     for (let i = 0; i < LIFT_TIPS.length; i++) {
       for (let j = i + 1; j < LIFT_TIPS.length; j++) spread = Math.max(spread, dist3(pts[LIFT_TIPS[i]], pts[LIFT_TIPS[j]]));
@@ -618,6 +628,27 @@ function rollOf(track: Track): number | undefined {
 }
 
 /** Mean fingertip distance to the palm center, divided by palm length. */
+/**
+ * How far the index and middle fingertips extend along the wrist -> middle knuckle
+ * direction, in units of that length (3D, so it holds when the hand turns): about 2 with
+ * the fingers straight, about 1 or less curled into a fist.
+ */
+function fingerReach(pts: Landmark[]): number {
+  const w = pts[LM.WRIST];
+  const m = pts[LM.MIDDLE_MCP];
+  const ax = m.x - w.x;
+  const ay = m.y - w.y;
+  const az = m.z - w.z;
+  const len2 = ax * ax + ay * ay + az * az;
+  if (len2 < 1e-12) return 0;
+  let sum = 0;
+  for (const i of [LM.INDEX_TIP, LM.MIDDLE_TIP]) {
+    const t = pts[i];
+    sum += ((t.x - w.x) * ax + (t.y - w.y) * ay + (t.z - w.z) * az) / len2;
+  }
+  return sum / 2;
+}
+
 function gripRatio(world: Landmark[]): number {
   if (world.length < 21) return 1;
   const center = mean(world, PALM_POINTS);

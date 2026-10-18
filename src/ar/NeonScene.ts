@@ -367,6 +367,9 @@ export class NeonScene {
       label = 'DROP';
     } else if (f.build?.state === 'armed') {
       label = 'LIFT ▲ TO BUILD';
+    } else if (f.build?.lost) {
+      label = `BUILD ${Math.round(f.build.value * 100)} · HOLDING`;
+      sub = 'BRING YOUR HAND BACK · OPEN IT TO DROP';
     } else if (f.build?.state === 'building') {
       label = `BUILD ${Math.round(f.build.value * 100)}`;
       sub = f.build.value >= RELEASE_DROP_MIN ? 'OPEN YOUR HAND TO DROP' : 'KEEP LIFTING';
@@ -467,9 +470,9 @@ export class NeonScene {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     // Flash (short).
-    const flash = Math.max(0, 1 - k * 4);
+    const flash = Math.max(0, 1 - k * 3);
     if (flash > 0) {
-      ctx.fillStyle = `rgba(255, 200, 240, ${(0.16 * flash).toFixed(3)})`;
+      ctx.fillStyle = `rgba(255, 200, 240, ${(0.3 * flash).toFixed(3)})`;
       ctx.fillRect(0, 0, cw, ch);
     }
     // Two rings, the second trailing.

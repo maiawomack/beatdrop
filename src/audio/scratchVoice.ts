@@ -19,7 +19,8 @@
  *   - sound: level follows speed like a cartridge (a still record is silent), and a
  *     speed-tracking low-pass keeps fast scratches from aliasing.
  *
- * Messages in:  load {left, right, pos, srcRate, spin} · target {pos} · release {spin} · stop
+ * Messages in:  load {left, right, pos, srcRate, spin} · target {pos} · release {spin} · brake {tc} · stop
+ * (brake: a tape stop, the record winds down to a halt over ~3 tc without fading out)
  * Messages out: pos {pos} (record position, ~40x/s) · done (faded out after release)
  * Positions are in source samples of the loaded window; speeds in playback rate (1 = normal).
  */
@@ -65,7 +66,6 @@ class Scratch extends AudioWorkletProcessor {
     super();
     this.l = null; this.r = null;
     this.port.onmessage = (e) => this.message(e.data);
-    const k = (tc) => 1 - Math.exp(-1 / (tc * sampleRate));
     this.kHand = k(T.HAND_TC); this.kMotor = k(T.MOTOR_TC); this.kFade = k(T.FADE_TC); this.kLevel = k(0.004);
     this.kHandDecay = Math.exp(-1 / (0.02 * sampleRate));
     this.predictFrames = T.PREDICT_SEC * sampleRate;
@@ -76,7 +76,8 @@ class Scratch extends AudioWorkletProcessor {
       this.l = d.left; this.r = d.right; this.srcRate = d.srcRate;
       this.pos = d.pos; this.vel = d.spin; this.hand = d.pos; this.lastTarget = d.pos;
       this.handVel = 0; this.slip = 0; this.since = 1e9;
-      this.held = true; this.motor = 0; this.fade = 1; this.level = Math.min(1, Math.abs(d.spin) / T.FULL_LEVEL_SPEED);
+      this.held = true; this.motor = 0; this.fade = 1; this.braking = false; this.kMotor = k(T.MOTOR_TC);
+      this.level = Math.min(1, Math.abs(d.spin) / T.FULL_LEVEL_SPEED);
       this.lpL = [0, 0]; this.lpR = [0, 0]; this.report = 0;
     } else if (!this.l) {
       return;
@@ -93,7 +94,9 @@ class Scratch extends AudioWorkletProcessor {
       this.hand = d.pos - this.slip;
       this.since = 0;
     } else if (d.type === 'release') {
-      this.held = false; this.motor = d.spin;
+      this.held = false; this.motor = d.spin; this.braking = false; this.kMotor = k(T.MOTOR_TC);
+    } else if (d.type === 'brake') {
+      this.held = false; this.motor = 0; this.braking = true; this.kMotor = k(d.tc);
     } else if (d.type === 'stop') {
       this.l = null;
     }
@@ -122,7 +125,7 @@ class Scratch extends AudioWorkletProcessor {
         this.vel += (want - this.vel) * this.kHand;
       } else {
         this.vel += (this.motor - this.vel) * this.kMotor;
-        this.fade -= this.fade * this.kFade;
+        if (!this.braking) this.fade -= this.fade * this.kFade;
       }
       this.pos += this.vel * sr;
       if (this.pos < 1) { this.pos = 1; this.vel = 0; }
@@ -146,6 +149,11 @@ class Scratch extends AudioWorkletProcessor {
     if (!this.held && this.fade < 1e-4) { this.l = null; this.port.postMessage({ type: 'done' }); }
     return true;
   }
+}
+
+/** One-pole coefficient for a time constant (s). */
+function k(tc) {
+  return 1 - Math.exp(-1 / (tc * sampleRate));
 }
 
 /** Catmull-Rom interpolation between d[i] and d[i + 1]. */

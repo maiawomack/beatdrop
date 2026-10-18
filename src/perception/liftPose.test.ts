@@ -58,6 +58,22 @@ describe('lift pose (fingertips bunched, pointing down)', () => {
     const p = new GestureProcessor(1);
     expect(run(p, makeHand({ down: true, bunched: false }), 6, 0).last.lift?.active).toBe(false);
   });
+
+  it('a fist pointing down (the tempo fist) is a fist, not a lift', () => {
+    // Bunched and pointing down like the lift pose, but the fingers are curled back behind
+    // the knuckles onto the palm instead of reaching past them.
+    const fist = makeHand({ down: true, bunched: true });
+    const mcpY = fist.landmarks[9]!.y;
+    [8, 12, 16, 20].forEach((tip, k) => {
+      fist.landmarks[tip] = { x: 0.49 + k * 0.006, y: mcpY - 0.035, z: 0 };
+      fist.landmarks[tip - 1] = { x: 0.49 + k * 0.006, y: mcpY + 0.02, z: 0 };
+    });
+    fist.landmarks[4] = { x: 0.5, y: mcpY - 0.02, z: 0 };
+    fist.worldLandmarks = fist.landmarks.map((l) => ({ ...l }));
+    const last = run(new GestureProcessor(1), fist, 6, 0).last;
+    expect(last.lift?.active).toBe(false);
+    expect(last.grip.active).toBe(true);
+  });
 });
 
 describe('open palm', () => {

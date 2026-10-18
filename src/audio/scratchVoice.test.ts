@@ -93,6 +93,21 @@ describe('scratch voice', () => {
     expect(v.peak()).toBeLessThan(0.05);
   });
 
+  it('brake: a tape stop winds the record down smoothly to silence (no fade, no clicks)', () => {
+    const v = voice();
+    v.load(1);
+    v.send({ type: 'brake', tc: 0.1 });
+    v.run(HAND_MS * 2);
+    expect(v.p.vel).toBeGreaterThan(0.3); // still winding down after 66 ms
+    expect(v.p.vel).toBeLessThan(0.8);
+    v.run(500);
+    expect(v.p.vel).toBeLessThan(0.01);
+    v.run(HAND_MS);
+    expect(v.peak()).toBeLessThan(0.05); // a stopped record is silent
+    expect(v.maxStep()).toBeLessThan(0.12);
+    expect(v.p.port.posted.some((m) => m.type === 'done')).toBe(false); // the engine ends it on the drop
+  });
+
   it('grabbing a playing record brakes it; letting go spins up, fades and hands back', () => {
     const v = voice();
     v.load(1);

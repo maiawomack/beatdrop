@@ -63,8 +63,12 @@ export const RECORD_TURNS_PER_SEC = 33.333 / 60;
 export const SCRATCH_VIRTUAL_RADIUS = 0.15;
 /** Seconds of audio per view-height of sideways movement at the top of the invisible record (small moves). */
 export const SCRATCH_SEC_PER_UNIT = 1 / (SCRATCH_VIRTUAL_RADIUS * 2 * Math.PI * RECORD_TURNS_PER_SEC);
-/** Tempo strip: pinch within this reach (view-height units) of it; dragging TEMPO_TRAVEL changes the tempo by TEMPO_RANGE. */
-const TEMPO_REACH = { x: 0.045, y: 0.03 };
+/**
+ * Tempo: a fist at the left or right edge of the screen (within TEMPO_EDGE of it, view
+ * width) takes that side's deck; moving it TEMPO_TRAVEL (view heights) changes the tempo
+ * by TEMPO_RANGE. Fists anywhere else never touch the tempo.
+ */
+export const TEMPO_EDGE = 0.15;
 export const TEMPO_TRAVEL = 0.3;
 export const TEMPO_RANGE = 0.16;
 /** Tempo within this of normal snaps to exactly ×1.00. */
@@ -149,10 +153,17 @@ const BUILD_RISE_RATE = 4;
 const BUILD_FALL_RATE = 0.9;
 /** Letting go of the lift pose with at least this much build drops (below it, it cancels). */
 export const RELEASE_DROP_MIN = BUILD_MIN;
-/** A build hand lost above this line (view y) went out the top of the frame: that cancels, never drops. */
-const BUILD_TOP_EDGE = 0.08;
 /** Full build is reachable this far below the top of the frame (view y). */
 const BUILD_TOP_REACH = 0.12;
+/**
+ * A build whose hand is lost (raised out of frame, blurred) is held this long (ms) for the
+ * hand to come back: in the lift pose it carries on, open it drops, not at all it cancels.
+ */
+export const BUILD_PARK_MS = 3000;
+/** A held build's hand must show an open hand this long (ms) to count as letting go (a clipped or re-engaging pose isn't one). */
+export const LET_GO_CONFIRM_MS = 200;
+/** Near the top edge (view y), a lift pose that ends is treated like a lost hand: the edge clips fingers. */
+const BUILD_EDGE_ZONE = 0.18;
 /** Minimum time between drops (ms). */
 export const DROP_COOLDOWN_MS = 1500;
 /** Drag the loop cap this far sideways (view-height units) to pull a loop clip out of the stem. */
@@ -204,6 +215,8 @@ export interface BuildView {
   point: Point2;
   /** Height (view units) above `from` for a full build. */
   travel: number;
+  /** The hand is lost and the build is held, waiting for it (see BUILD_PARK_MS). */
+  lost?: boolean;
 }
 
 export type InteractionEvent =
@@ -356,12 +369,11 @@ interface FadeGrab {
 /** Pinch on a deck's tempo strip: drag up/down for faster/slower. */
 interface TempoGrab {
   kind: 'tempo';
+  /** The deck's tempo readout, shown at the screen edge while the fist holds it. */
   strip: TempoStrip;
-  startT: number;
   startY: number;
   start: number;
   value: number;
-  maxTravel: number;
 }
 
 type Grab = BodyGrab | LevelGrab | CapGrab | BuildGrab | ScratchGrab | FadeGrab | FaderGrab | TempoGrab;
@@ -435,6 +447,8 @@ export class InteractionController {
   private pinchPoints = new Map<HandId, Point2>();
   /** Live build gesture, or null. */
   build: BuildView | null = null;
+  /** A build held while its hand is lost, waiting for it to come back. */
+  private parked: { hand: HandId; value: number; travel: number; from: Point2; until: number; backSince: number | null } | null = null;
   /** Current state of each hand in the frame. */
   readonly handModes = new Map<HandId, HandMode>();
   private lastDropT = -Infinity;
@@ -488,7 +502,9 @@ export class InteractionController {
             ? g.via === 'palm'
               ? !hand.palm?.active
               : !hand.pinch.active
-            : g?.kind === 'fader' || g?.kind === 'tempo'
+            : g?.kind === 'tempo'
+              ? hand[this.gesture].phase === 'end'
+              : g?.kind === 'fader'
               ? // Once a pinch has a target it keeps it until the pinch opens (curling fingers doesn't drop it).
                 !hand.pinch.active
               : g?.kind === 'crossfade'
@@ -500,6 +516,7 @@ export class InteractionController {
     for (const id of [...this.grabs.keys()]) {
       if (!points.has(id)) this.release(id, points, t, true);
     }
+    this.updateParked(frame, t);
 
     this.updateTargets(frame, t);
 
@@ -507,6 +524,7 @@ export class InteractionController {
       const phase = hand[this.gesture].phase;
       this.pinchPoints.set(hand.id, { ...hand.pinch.point });
       if (hand.lift?.active) this.lastLift.set(hand.id, t);
+      if (this.parked?.hand === hand.id) continue; // back, deciding: carry on or let go
       // Two fingers up (✌) takes the crossfader.
       if (hand.twoUp?.active && !hand.lift?.active) {
         this.armTwoUp(hand, t);
@@ -515,9 +533,18 @@ export class InteractionController {
         continue;
       }
       this.twoUpArm.delete(hand.id);
-      // A pinch that isn't closing into a fist arms the crossfader.
-      if (hand.pinch.active && !hand.grip.active && !hand.lift?.active && !hand.palm?.active) this.armPinch(hand, t);
+      // A pinch (not closing into a fist) arms the control under it. Over a control (bar,
+      // record) a pinch wins: reaching down to the bars often looks like the
+      // lift pose or an open palm, and must not start a build or a scratch.
+      const pinching = hand.pinch.active && !hand.grip.active;
+      const onControl = pinching && this.pinchTarget(hand.pinch.point);
+      if (pinching && (onControl || (!hand.lift?.active && !hand.palm?.active))) this.armPinch(hand, t);
       else this.pinchArm.delete(hand.id);
+      if (onControl) {
+        this.palmArm.delete(hand.id);
+        this.gestureStart.delete(hand.id);
+        continue;
+      }
       // An open palm (fingers not hanging down) scratches the deck on its side of the screen; never stems.
       if (hand.palm?.active && !hand.fingersDown && !hand.lift?.active) {
         this.armPalm(hand, t);
@@ -653,14 +680,6 @@ export class InteractionController {
       this.onEvent({ type: 'scratchStart', deck: platter.deck, hand: hand.id });
       return;
     }
-    const strip = this.tempoAt(p);
-    if (strip) {
-      const start = this.perfView.tempo[strip.deck];
-      strip.hand = hand.id;
-      strip.value = start;
-      this.grabs.set(hand.id, { kind: 'tempo', strip, startT: t, startY: p.y, start, value: start, maxTravel: 0 });
-      return;
-    }
     const bar = this.faderAt(p);
     if (bar) {
       bar.holders = [hand.id];
@@ -713,22 +732,12 @@ export class InteractionController {
     return this.platters.find((pl) => !pl.hand && pl.deck === (p.x < 0.5 ? 'A' : 'B'));
   }
 
-  /** The tempo strip under (or near) this point, if free. */
-  private tempoAt(p: Point2): TempoStrip | undefined {
-    return this.tempoStrips.find(
-      (s) =>
-        !s.hand &&
-        Math.abs(p.x - s.position.x) * this.aspect <= TEMPO_REACH.x &&
-        Math.abs(p.y - s.position.y) <= s.halfHeight + TEMPO_REACH.y,
-    );
-  }
-
   /** Pinched tempo strip: relative drag, up = faster, with a notch at ×1.00. */
   private adjustTempo(hand: HandId, g: TempoGrab): void {
-    const p = this.pinchPoints.get(hand);
+    const p = this.dragPoints.get(hand);
     if (!p) return;
+    g.strip.position = { x: g.strip.position.x, y: p.y };
     const dy = g.startY - p.y;
-    g.maxTravel = Math.max(g.maxTravel, Math.abs(dy));
     let rate = Math.max(0.5, Math.min(2, g.start + (dy / TEMPO_TRAVEL) * TEMPO_RANGE));
     if (Math.abs(rate - 1) < TEMPO_DETENT) rate = 1;
     g.strip.value = rate;
@@ -737,7 +746,18 @@ export class InteractionController {
     this.onEvent({ type: 'tempo', deck: g.strip.deck, hand, rate });
   }
 
-  /** The fader bar whose fill line (the top of the bar) is near this point, if any. */
+  /** Whether a pinch here would take a control (record, fader bar). */
+  private pinchTarget(p: Point2): boolean {
+    return (
+      this.platters.some((pl) => !pl.hand && viewDist(p, pl.position, this.aspect) <= pl.radius + PLATTER_PAD) ||
+      this.faderAt(p) !== null
+    );
+  }
+
+  /**
+   * The fader bar under this point: anywhere along its track (the drag is relative, so you
+   * don't have to find the top of the fill), or a little above its top. Nearest bar wins.
+   */
   private faderAt(p: Point2): HoloObject | null {
     let best: HoloObject | null = null;
     let bestD = Infinity;
@@ -745,16 +765,34 @@ export class InteractionController {
       if (!o.vertical || o.holders.length > 0) continue;
       const dx = Math.abs(p.x - o.position.x) * this.aspect;
       if (dx > o.halfSize.x + FADER_GRAB_PAD_X) continue;
-      const top = o.position.y + o.halfSize.y - 2 * o.halfSize.y * o.audio.volume;
-      const dy = p.y - top; // negative = above the line
-      if (dy < -FADER_GRAB_ABOVE || dy > FADER_GRAB_BELOW) continue;
-      const d = Math.hypot(dx, dy);
-      if (d < bestD) {
+      const trackTop = o.position.y - o.halfSize.y;
+      const bottom = o.position.y + o.halfSize.y;
+      if (p.y < trackTop - FADER_GRAB_ABOVE || p.y > bottom + FADER_GRAB_BELOW) continue;
+      if (dx < bestD) {
         best = o;
-        bestD = d;
+        bestD = dx;
       }
     }
     return best;
+  }
+
+  /**
+   * A fist at the left or right edge of the screen (with nothing to grab) takes that
+   * deck's tempo (left = A, right = B), stretching the whole song (every stem) faster or
+   * slower as it moves up or down. Its readout appears at the edge with the knob at the fist.
+   */
+  private grabTempoBySide(hand: HandId): boolean {
+    const p = this.dragPoints.get(hand);
+    const deck = p && edgeDeck(p);
+    const strip = deck && this.tempoStrips.find((s) => s.deck === deck && !s.hand);
+    if (!p || !strip) return false;
+    const start = this.perfView.tempo[strip.deck];
+    strip.hand = hand;
+    strip.value = start;
+    strip.position = { x: strip.position.x, y: p.y };
+    this.grabs.set(hand, { kind: 'tempo', strip, startY: p.y, start, value: start });
+    this.targets.delete(hand);
+    return true;
   }
 
   /** Pinched fader: the bar's top follows the pinch 1:1, rate-limited. */
@@ -820,15 +858,17 @@ export class InteractionController {
     for (const arm of this.palmArm.values()) {
       if (arm.platter) arm.platter.hover = Math.max(arm.platter.hover, Math.min(1, 0.4 + (t - arm.since) / SCRATCH_ARM_MS));
     }
-    // Bar tops and tempo strips light up under a hand that could pinch them.
+    // A hand at a screen edge shows that deck's tempo pulse, level with the hand.
     for (const st of this.tempoStrips) st.hover = st.hand ? 1 : 0;
+    for (const p of this.dragPoints.values()) {
+      const st = this.tempoStrips.find((s) => !s.hand && s.deck === edgeDeck(p));
+      if (!st) continue;
+      st.hover = 1;
+      st.position = { x: st.position.x, y: p.y };
+    }
+    // Bars light up under a hand that could pinch them.
     for (const [hand, p] of this.pinchPoints) {
       if (this.grabs.has(hand)) continue;
-      const strip = this.tempoAt(p);
-      if (strip) {
-        strip.hover = 1;
-        continue;
-      }
       const bar = this.faderAt(p);
       if (bar) bar.hover = 1;
     }
@@ -846,6 +886,7 @@ export class InteractionController {
       const g = this.grabs.get(hand.id);
       let mode: HandMode;
       if (!hand.tracked) mode = 'trackingLost';
+      else if (this.parked?.hand === hand.id) mode = 'building';
       else if (!g) {
         const hovering =
           this.targets.has(hand.id) ||
@@ -923,7 +964,11 @@ export class InteractionController {
       (sticky && canTake(sticky) && !sticky.levelHand && !sticky.control && !sticky.vertical ? sticky : null) ??
       this.pick(aim) ??
       this.pickStretchJoin(points.get(hand.id)!);
-    if (!target) return;
+    // Nothing to pick up: a fist is the tempo of the deck on its side.
+    if (!target) {
+      this.grabTempoBySide(hand.id);
+      return;
+    }
     // The hand must actually be on the object NOW, not just a moment ago:
     // otherwise closing the hand while moving away grabs from a distance.
     const reach = target.holders.length === 1 ? GRAB_REACH + STRETCH_JOIN_REACH : GRAB_REACH;
@@ -984,8 +1029,6 @@ export class InteractionController {
     if (g.kind === 'tempo') {
       g.strip.hand = null;
       g.strip.value = null;
-      // A quick pinch-tap without dragging resets to normal speed.
-      if (!lost && t - g.startT < TAP_MS + 150 && g.maxTravel < TAP_MOVE) this.onEvent({ type: 'tempo', deck: g.strip.deck, hand, rate: 1 });
       return;
     }
     if (g.kind === 'fader') {
@@ -1002,13 +1045,21 @@ export class InteractionController {
       return;
     }
     if (g.kind === 'build') {
-      // Letting go of the lift pose is the drop, once it's building. A hand that vanishes
-      // (fast opening blurs the camera) counts as letting go too, unless it left through
-      // the top of the frame. To cancel, lower the hand first: the build falls with it.
-      const offCooldown = t - this.lastDropT >= DROP_COOLDOWN_MS;
+      // A lost hand (raised out of frame, blurred), or a pose that ends right at the top
+      // edge, doesn't decide anything: the build holds and waits for the hand (updateParked).
       const p = this.dragPoints.get(hand) ?? this.build?.point;
-      const outTheTop = lost && (!p || p.y < BUILD_TOP_EDGE);
-      if (!g.dropped && !outTheTop && g.value >= RELEASE_DROP_MIN && offCooldown) this.fireDrop(hand, g, t);
+      const atEdge = !!p && p.y < BUILD_EDGE_ZONE;
+      if (!g.dropped && g.value >= RELEASE_DROP_MIN && (lost || atEdge)) {
+        this.parked = { hand, value: g.value, travel: g.travel, from: g.from, until: t + BUILD_PARK_MS, backSince: null };
+        if (this.build) this.build.lost = true;
+        return; // no buildEnd: the engine keeps the build
+      }
+      // Letting go of the lift pose is the drop, once it's building. To cancel, lower the
+      // hand first (the build falls with it), then let go.
+      if (!g.dropped && g.value >= RELEASE_DROP_MIN && t - this.lastDropT >= DROP_COOLDOWN_MS) {
+        g.dropped = true;
+        this.fireDrop(hand, g.value, t);
+      }
       this.build = null;
       this.onEvent({ type: 'buildEnd', hand, dropped: g.dropped });
       return;
@@ -1233,11 +1284,53 @@ export class InteractionController {
     }
   }
 
-  private fireDrop(hand: HandId, g: BuildGrab, t: number): void {
-    g.dropped = true;
+  private fireDrop(hand: HandId, value: number, t: number): void {
     this.lastDropT = t;
     if (this.build) this.build.state = 'dropped';
-    this.onEvent({ type: 'drop', hand, build: g.value });
+    this.onEvent({ type: 'drop', hand, build: value });
+  }
+
+  /**
+   * A held build waits for its hand: in the lift pose, it carries on from the same level;
+   * clearly open (an open palm) for LET_GO_CONFIRM_MS, that's letting go, so it drops;
+   * gone from the camera for BUILD_PARK_MS, it cancels. A hand that's visible but neither
+   * (fingers clipped at the top edge, mid-gesture) keeps it holding.
+   */
+  private updateParked(frame: PerceptionFrame, t: number): void {
+    const pk = this.parked;
+    if (!pk) return;
+    const hand = frame.hands.find((h) => h.id === pk.hand && h.tracked);
+    if (hand?.lift?.active && !this.grabs.has(hand.id)) {
+      this.parked = null;
+      const p = this.dragPoints.get(hand.id)!;
+      // Same build level at the hand's new height.
+      const g: BuildGrab = { kind: 'build', startY: p.y + pk.value * pk.travel, from: pk.from, value: pk.value, dropped: false, travel: pk.travel };
+      this.grabs.set(hand.id, g);
+      this.targets.delete(hand.id);
+      this.build = { hand: hand.id, value: pk.value, state: 'building', from: { ...pk.from }, point: { ...p }, travel: pk.travel };
+      return;
+    }
+    if (hand) {
+      pk.until = t + BUILD_PARK_MS; // visible: keep holding
+      if (!hand.palm?.active) {
+        pk.backSince = null;
+        return;
+      }
+      pk.backSince ??= t;
+      if (t - pk.backSince < LET_GO_CONFIRM_MS) return;
+      this.parked = null;
+      const dropped = t - this.lastDropT >= DROP_COOLDOWN_MS;
+      if (dropped) this.fireDrop(pk.hand, pk.value, t);
+      this.build = null;
+      this.onEvent({ type: 'buildEnd', hand: pk.hand, dropped });
+      return;
+    }
+    pk.backSince = null;
+    if (t >= pk.until) {
+      this.parked = null;
+      this.build = null;
+      this.onEvent({ type: 'buildEnd', hand: pk.hand, dropped: false });
+    }
   }
 
   /**
@@ -1629,6 +1722,11 @@ export class InteractionController {
       }
     }
   }
+}
+
+/** The deck whose tempo edge this point is at (left = A, right = B), if any. */
+function edgeDeck(p: Point2): 'A' | 'B' | null {
+  return p.x < TEMPO_EDGE ? 'A' : p.x > 1 - TEMPO_EDGE ? 'B' : null;
 }
 
 function record(history: Map<string, Sample[]>, key: string, t: number, p: Point2): void {

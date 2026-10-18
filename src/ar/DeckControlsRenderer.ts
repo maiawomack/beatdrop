@@ -1,6 +1,12 @@
 import { viewToPixels } from '../perception';
 import type { CrossfadeZone, Platter, TempoStrip } from './HoloObject';
-import { TEMPO_RANGE } from './InteractionController';
+
+/** A deck's tempo for its edge pulse: rate, base BPM, and where it is in the beat (0..1, null if unknown or stopped). */
+export interface TempoInfo {
+  rate: number;
+  bpm: number | null;
+  beatPhase: number | null;
+}
 
 const DECK_A = '#4fd9d2';
 const DECK_B = '#c47be8';
@@ -22,67 +28,51 @@ export class DeckControlsRenderer {
     crossfader: number,
     positionOf: (deck: 'A' | 'B') => number,
     strips: readonly TempoStrip[] = [],
-    tempoOf: (deck: 'A' | 'B') => { rate: number; bpm: number | null } = () => ({ rate: 1, bpm: null }),
+    tempoOf: (deck: 'A' | 'B') => TempoInfo = () => ({ rate: 1, bpm: null, beatPhase: null }),
   ): void {
     for (const pl of platters) this.drawPlatter(ctx, pl, positionOf(pl.deck));
     for (const st of strips) this.drawTempo(ctx, st, tempoOf(st.deck));
     if (zone) this.drawCrossfader(ctx, zone, crossfader);
   }
 
-  /** Tempo strip: notch at ×1.00, knob at the current rate (±TEMPO_RANGE spans the strip), readout below. */
-  private drawTempo(ctx: CanvasRenderingContext2D, st: TempoStrip, t: { rate: number; bpm: number | null }): void {
+  /**
+   * Tempo at a screen edge (left = A, right = B), level with the hand: a clean solid line
+   * in the deck's colour along the edge that thickens on each beat (so it quickens as the
+   * song speeds up), with plain text beside it. Dim while a hand is at the edge, solid while
+   * a fist holds the tempo. No blur or glow.
+   */
+  private drawTempo(ctx: CanvasRenderingContext2D, st: TempoStrip, t: TempoInfo): void {
+    const held = st.hand !== null;
+    const vis = held ? 1 : st.hover;
+    if (vis <= 0) return;
     const { width: cw, height: ch } = ctx.canvas;
     const u = ch / 720;
-    const c = viewToPixels(st.position, cw, ch);
-    const half = st.halfHeight * ch;
+    const left = st.deck === 'A';
+    const y = st.position.y * ch;
     const rate = st.value ?? t.rate;
-    const held = st.hand !== null;
-    const glow = Math.max(st.hover, held ? 1 : 0);
-    const k = Math.max(-1, Math.min(1, (rate - 1) / TEMPO_RANGE));
-    const ky = c.y - k * half;
+    const beat = t.beatPhase === null ? 0 : Math.exp(-t.beatPhase * 6);
+    const w = u * (held ? 5 : 3) * (1 + 0.8 * beat);
+    const half = ch * 0.1;
     ctx.save();
-    ctx.globalAlpha = 0.5 + 0.5 * glow;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = u * 3;
-    ctx.beginPath();
-    ctx.moveTo(c.x, c.y - half);
-    ctx.lineTo(c.x, c.y + half);
-    ctx.stroke();
-    // ×1.00 notch, and the stretch from it to the knob in the deck color.
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = u * 1.5;
-    ctx.beginPath();
-    ctx.moveTo(c.x - u * 7, c.y);
-    ctx.lineTo(c.x + u * 7, c.y);
-    ctx.stroke();
-    ctx.strokeStyle = st.color;
-    ctx.lineWidth = u * 3;
-    ctx.beginPath();
-    ctx.moveTo(c.x, c.y);
-    ctx.lineTo(c.x, ky);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.roundRect(c.x - u * 9, ky - u * 4, u * 18, u * 8, u * 3);
-    ctx.fillStyle = 'rgba(240,244,255,0.95)';
-    if (glow > 0.05) {
-      ctx.shadowColor = st.color;
-      ctx.shadowBlur = u * 12 * glow;
-    }
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-    // One line above the strip: change and resulting BPM (the record's own label sits below it).
-    ctx.textAlign = 'center';
+    ctx.globalAlpha = vis * (held ? 1 : 0.55);
+    ctx.fillStyle = st.color;
+    ctx.fillRect(left ? 0 : cw - w, y - half, w, half * 2);
+    // Readout beside the line.
+    ctx.textAlign = left ? 'left' : 'right';
     ctx.textBaseline = 'middle';
-    const pct = (rate - 1) * 100;
-    const pctText = Math.abs(pct) < 0.05 ? '±0.0%' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
-    ctx.font = `700 ${u * 10}px ui-monospace, "SF Mono", Menlo, monospace`;
-    ctx.fillStyle = 'rgba(235,242,255,0.9)';
-    ctx.fillText(t.bpm ? `${pctText} · ${(t.bpm * rate).toFixed(1)} BPM` : pctText, c.x, c.y - half - u * 22);
-    ctx.font = `600 ${u * 8}px ui-monospace, "SF Mono", Menlo, monospace`;
-    ctx.fillStyle = 'rgba(235,242,255,0.55)';
-    ctx.fillText(held ? 'TEMPO ↕' : 'PINCH ↕ TEMPO', c.x, c.y - half - u * 10);
+    const tx = left ? u * 16 : cw - u * 16;
+    ctx.fillStyle = 'rgba(240,246,255,0.95)';
+    if (held) {
+      const pct = (rate - 1) * 100;
+      ctx.font = `700 ${u * 15}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.fillText(Math.abs(pct) < 0.05 ? '±0.0%' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`, tx, y - u * 9);
+      ctx.font = `600 ${u * 10}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.fillStyle = 'rgba(235,242,255,0.7)';
+      ctx.fillText(t.bpm ? `${(t.bpm * rate).toFixed(1)} BPM ↕` : 'TEMPO ↕', tx, y + u * 9);
+    } else {
+      ctx.font = `600 ${u * 10}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.fillText('FIST ↕ TEMPO', tx, y);
+    }
     ctx.restore();
   }
 

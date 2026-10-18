@@ -239,14 +239,13 @@ export interface Platter {
 }
 
 /** A deck's tempo strip (next to its record): pinch and drag up/down. */
+/** A deck's tempo control: a pulse at its screen edge (left = A, right = B), shown when a hand is there. */
 export interface TempoStrip {
   deck: 'A' | 'B';
-  /** Center, view space. */
+  /** Centre of the pulse, view space: at the edge, level with the hand. */
   position: Point2;
-  /** Half length, view-height units. */
-  halfHeight: number;
   color: string;
-  /** 0..1 a pinch-ready hand is near it. */
+  /** 0..1: a hand is at this edge. */
   hover: number;
   /** Hand holding it, if any. */
   hand: HandId | null;

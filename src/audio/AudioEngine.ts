@@ -29,6 +29,10 @@ const GATE_START = 0.6;
 const GATE_DEPTH = 0.8;
 /** The breath of silence before the drop: up to half a beat, at most this long (s). */
 const DROP_GAP_MAX = 0.15;
+/** With at least this long to wait for the beat (s), the decks tape-stop into the drop instead. */
+const BRAKE_MIN = 0.12;
+/** After the drop, the music pumps (ducks after each kick, swells back) for this many beats. */
+const PUMP_BEATS = 8;
 /** Build-up: how much each stem is ducked at full build. Full mixes rely on the high-pass. */
 const BUILD_DUCK: Partial<Record<ChannelKey, number>> = { bass: 0.85, drums: 0.3 };
 /** Scheduling headroom for beat-quantized events (s). */
@@ -86,6 +90,8 @@ export class AudioEngine {
   private dropTimer: ReturnType<typeof setTimeout> | null = null;
   /** The pending drop's impact sounds, so a drop cancelled before it lands stays silent. */
   private impactSources: AudioScheduledSourceNode[] = [];
+  /** Decks tape-stopping into the pending drop. */
+  private braking: DeckId[] = [];
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -656,16 +662,26 @@ export class AudioEngine {
       T = Math.max(now + LEAD, ch.ctxTimeAt(next));
     }
     const peak = mixer.build;
-    // The breath before the drop, if there's room for one that you can hear.
-    const gap = Math.min(DROP_GAP_MAX, beat / 2, T - now - 0.03);
-    const gapAt = gap >= 0.06 ? T - gap : T;
-    this.stopRoll(gapAt);
     for (const p of this.buildParams()) p.cancelScheduledValues(now);
-    this.applyBuild(Math.min(1, peak + 0.15), now, Math.max(0.02, (T - now) / 3));
-    if (gapAt < T) {
-      this.buildLevel.gain.setTargetAtTime(0.05, gapAt, 0.008);
-      this.riserGain.gain.setTargetAtTime(0, gapAt, 0.01);
+    if (T - now >= BRAKE_MIN) {
+      // Time to wait for the beat: the decks tape-stop right away (you hear the let-go
+      // instantly), the riser and roll cut, and the drop slams in on the beat.
+      this.stopRoll(now);
+      this.braking = DECK_IDS.filter((d) => this.state.decks[d].playing && !this.state.decks[d].scratching && this.channels[d].brake(T - now));
+      this.applyBuild(peak, now, 0.02);
+      this.riserGain.gain.setTargetAtTime(0, now, 0.03);
+    } else {
+      // A breath before the drop, if there's room for one that you can hear.
+      const gap = Math.min(DROP_GAP_MAX, beat / 2, T - now - 0.03);
+      const gapAt = gap >= 0.06 ? T - gap : T;
+      this.stopRoll(gapAt);
+      this.applyBuild(Math.min(1, peak + 0.15), now, Math.max(0.02, (T - now) / 3));
+      if (gapAt < T) {
+        this.buildLevel.gain.setTargetAtTime(0.05, gapAt, 0.008);
+        this.riserGain.gain.setTargetAtTime(0, gapAt, 0.01);
+      }
     }
+    for (const d of this.braking) this.channels[d].endBrake(T);
     for (const f of this.buildHp) {
       f.frequency.setTargetAtTime(BUILD_HPF.min, T, 0.008);
       f.Q.setTargetAtTime(Math.SQRT1_2, T, 0.02);
@@ -673,9 +689,10 @@ export class AudioEngine {
     // Width blooms past normal for a moment, then settles.
     this.width.set(1.3, T, 0.004);
     this.width.set(1, T + 0.2, 0.35);
-    // Bass punch: +4 dB low shelf on the hit, easing off over about a second.
-    this.dropShelf.gain.setTargetAtTime(4, T, 0.005);
-    this.dropShelf.gain.setTargetAtTime(0, T + 0.15, 0.45);
+    // Bass punch: +6 dB low shelf on the hit, easing off over about a second.
+    this.dropShelf.gain.setTargetAtTime(6, T, 0.005);
+    this.dropShelf.gain.setTargetAtTime(0, T + 0.2, 0.5);
+    if (beat > 0) this.pump(T, beat);
     this.buildLevel.gain.setTargetAtTime(1, T, 0.004);
     this.riserGain.gain.setTargetAtTime(0, T, 0.012);
     this.riserLfoDepth.gain.setTargetAtTime(0.15, T, 0.1);
@@ -693,13 +710,28 @@ export class AudioEngine {
     if (this.dropTimer) clearTimeout(this.dropTimer);
     this.dropTimer = setTimeout(() => {
       mixer.dropPending = false;
-      mixer.dropAtMs = null;
+      // dropAtMs stays: the visuals (impact, waves) are timed from it after the drop lands.
       mixer.build = 0;
       mixer.drops++;
       this.dropTimer = null;
       this.impactSources = [];
+      this.braking = [];
       this.emit();
     }, Math.max(0, (T - now) * 1000));
+  }
+
+  /**
+   * Sidechain-style pump after the drop: just after each beat's kick (its attack gets
+   * through) the music ducks, then swells back by the next beat, easing off over
+   * PUMP_BEATS. Runs on the gate, so the impact and roll aren't pumped.
+   */
+  private pump(T: number, beat: number): void {
+    for (let i = 0; i < PUMP_BEATS; i++) {
+      const at = T + i * beat;
+      const depth = 0.5 * (1 - i / PUMP_BEATS);
+      this.gate.gain.setTargetAtTime(1 - depth, at + 0.03, 0.01);
+      this.gate.gain.setTargetAtTime(1, at + 0.08, beat * 0.22);
+    }
   }
 
   // --- Snare roll ----------------------------------------------------------
@@ -806,13 +838,13 @@ export class AudioEngine {
    */
   private impact(T: number, strength: number): void {
     const ctx = this.ctx;
-    const level = 0.28 + 0.22 * strength;
+    const level = 0.38 + 0.25 * strength;
     const sub = ctx.createOscillator();
     sub.frequency.setValueAtTime(150, T);
     sub.frequency.exponentialRampToValueAtTime(52, T + 0.09);
     sub.frequency.exponentialRampToValueAtTime(42, T + 1.2);
     const drive = ctx.createWaveShaper();
-    drive.curve = softClipCurve(2.2);
+    drive.curve = softClipCurve(3);
     drive.oversample = '2x';
     const subGain = ctx.createGain();
     subGain.gain.setValueAtTime(0.0001, T);
@@ -835,6 +867,8 @@ export class AudioEngine {
     crash.start(T, Math.random());
     crash.stop(T + 1.9);
     this.impactSources = [sub, crash];
+    // A big snare crack on the one.
+    this.snare(T, 0.3 + 0.15 * strength, 1);
   }
 
   /**
@@ -855,6 +889,8 @@ export class AudioEngine {
       }
     }
     this.impactSources = [];
+    for (const d of this.braking) this.channels[d].endBrake(now);
+    this.braking = [];
     this.stopRoll(now);
     for (const p of this.buildParams()) p.cancelScheduledValues(now);
     this.applyBuild(0, now, 0.08);

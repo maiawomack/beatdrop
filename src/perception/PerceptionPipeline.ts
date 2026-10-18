@@ -16,6 +16,8 @@ export interface PerceptionOptions {
  */
 export class PerceptionPipeline {
   private listeners = new Set<FrameListener>();
+  /** Called when tracking or a frame listener throws; the pipeline keeps running either way. */
+  onError: (err: unknown) => void = (err) => console.error('[perception]', err);
   private running = false;
   private lastVideoTime = -1;
   private lastTimestamp = 0;
@@ -70,19 +72,29 @@ export class PerceptionPipeline {
     if (!this.running) return;
     const { video } = this;
 
-    // Only process genuinely new frames.
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.currentTime !== this.lastVideoTime) {
-      this.lastVideoTime = video.currentTime;
-      // MediaPipe requires strictly increasing timestamps.
-      const t = Math.max(performance.now(), this.lastTimestamp + 1);
-      this.lastTimestamp = t;
+    // Only process genuinely new frames. An error never stops the loop: the next frame is
+    // always scheduled (before, one throwing listener froze tracking until a reload).
+    try {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.currentTime !== this.lastVideoTime) {
+        this.lastVideoTime = video.currentTime;
+        // MediaPipe requires strictly increasing timestamps.
+        const t = Math.max(performance.now(), this.lastTimestamp + 1);
+        this.lastTimestamp = t;
 
-      this.gestures.setAspect(video.videoWidth / video.videoHeight);
-      const hands = this.gestures.update(this.tracker.detect(video, t), t);
-      const frame: PerceptionFrame = { timestamp: t, hands };
-      for (const l of this.listeners) l(frame);
+        this.gestures.setAspect(video.videoWidth / video.videoHeight);
+        const hands = this.gestures.update(this.tracker.detect(video, t), t);
+        const frame: PerceptionFrame = { timestamp: t, hands };
+        for (const l of this.listeners) {
+          try {
+            l(frame);
+          } catch (err) {
+            this.onError(err);
+          }
+        }
+      }
+    } catch (err) {
+      this.onError(err);
     }
-
     this.scheduleNext();
   }
 }

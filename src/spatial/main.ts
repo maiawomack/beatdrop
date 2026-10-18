@@ -200,6 +200,17 @@ function store(key: string, value: string | null): void {
   }
 }
 
+/** The latest error from the frame or draw loop, shown in the status line so it can be reported. */
+let lastError: { text: string; at: number } | null = null;
+const reported = new Set<string>();
+function reportError(stage: string, err: unknown): void {
+  const text = `${stage}: ${err instanceof Error ? err.message : String(err)}`;
+  lastError = { text, at: performance.now() };
+  if (reported.has(text)) return; // log each distinct error once
+  reported.add(text);
+  console.error(`[spatial] ${stage}`, err);
+}
+
 async function main(): Promise<void> {
   hud.textContent = 'Starting camera + loading hand model + preparing audio…';
   // The shared two-deck engine (Task 1), owned by the decks screen (Monitor 1)
@@ -404,6 +415,13 @@ async function main(): Promise<void> {
   let lastDraw = performance.now();
   const draw = (now: number) => {
     requestAnimationFrame(draw);
+    try {
+      drawFrame(now);
+    } catch (err) {
+      reportError('draw', err);
+    }
+  };
+  const drawFrame = (now: number) => {
     const dt = Math.min(0.1, (now - lastDraw) / 1000);
     lastDraw = now;
     const k = 1 - Math.exp(-DISPLAY_RATE * dt);
@@ -426,10 +444,15 @@ async function main(): Promise<void> {
       perf: audio.perf,
     };
     neon.update(display, scene, canvas.width, canvas.height);
+    // The drop hits: the whole stage (camera and overlay together) shakes for a moment.
+    const shake = Math.max(0, neon.impact - 0.55) / 0.45;
+    const jolt = (px: number) => `${((Math.random() * 2 - 1) * px * shake).toFixed(1)}px`;
+    stage.style.translate = shake > 0 ? `${jolt(16)} ${jolt(11)}` : '';
     waveforms.pulse = neon.pulse;
     waveforms.energy = neon.energy;
     waveforms.impact = neon.impact;
-    const line = connectionText(engine, now - switchedAt < 4000) + statusText(audio, audio.state);
+    const error = lastError && now - lastError.at < 6000 ? `⚠ ${lastError.text}   ` : '';
+    const line = error + connectionText(engine, now - switchedAt < 4000) + statusText(audio, audio.state);
     if (status.textContent !== line) status.textContent = line;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     neon.drawBackground(ctx);
@@ -441,7 +464,11 @@ async function main(): Promise<void> {
       interaction.crossfadeValue ?? audio.perf.crossfader,
       (d) => engine.getPositionSec(d),
       interaction.tempoStrips,
-      (d) => ({ rate: audio.state.decks[d].playbackRate, bpm: audio.state.decks[d].bpm }),
+      (d) => {
+        const s = audio.state.decks[d];
+        const beats = s.bpm && s.playing ? ((engine.getPositionSec(d) - s.firstBeatSec) * s.bpm) / 60 : null;
+        return { rate: s.playbackRate, bpm: s.bpm, beatPhase: beats === null ? null : beats - Math.floor(beats) };
+      },
     );
     neon.drawForeground(ctx, scene);
     if (lastFrame) drawHandOverlay(ctx, lastFrame, GRAB_GESTURE, interaction.handModes);
@@ -450,6 +477,7 @@ async function main(): Promise<void> {
   };
   requestAnimationFrame(draw);
 
+  pipeline.onError = (err) => reportError('tracking', err);
   pipeline.onFrame((frame) => {
     const aspect = video.videoWidth / video.videoHeight;
     syncDeckStems(audio, interaction, aspect, titleOf);

@@ -84,14 +84,12 @@ export function syncPlatters(engine: AudioStateSource, interaction: InteractionC
     } else next.push(fresh);
   }
   interaction.platters = next;
-  // A tempo strip beside each record, on the side toward the middle of the screen.
+  // Each deck's tempo is a pulse at its screen edge (left = A, right = B); the controller
+  // moves it level with the hand there.
   interaction.tempoStrips = next.map((pl) => {
     const existing = interaction.tempoStrips.find((s) => s.deck === pl.deck);
-    const dir = pl.deck === 'A' ? 1 : -1;
-    const position = { x: pl.position.x + (dir * (pl.radius + 0.05)) / aspect, y: pl.position.y };
-    const halfHeight = pl.radius * 1.05;
-    if (existing) return Object.assign(existing, { position, halfHeight });
-    return { deck: pl.deck, position, halfHeight, color: pl.color, hover: 0, hand: null, value: null } satisfies TempoStrip;
+    if (existing) return existing;
+    return { deck: pl.deck, position: { x: pl.deck === 'A' ? 0 : 1, y: 0.5 }, color: pl.color, hover: 0, hand: null, value: null } satisfies TempoStrip;
   });
 }
 

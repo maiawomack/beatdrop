@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HandId, Point2 } from '../perception';
 import { capOffset, type HoloObject, type StemControl } from './HoloObject';
-import { BUILD_TRAVEL, DROP_COOLDOWN_MS, FILTER_MAX_RATE, FILTER_TRAVEL, LOOP_STEP } from './InteractionController';
-import { ASPECT, FRAME_MS, hand, liftHand, Rig } from './testRig';
+import { BUILD_PARK_MS, BUILD_TRAVEL, DROP_COOLDOWN_MS, FILTER_MAX_RATE, FILTER_TRAVEL, LET_GO_CONFIRM_MS, LOOP_STEP } from './InteractionController';
+import { ASPECT, FRAME_MS, gesture, hand, liftHand, Rig } from './testRig';
 
 function capPoint(obj: HoloObject, kind: StemControl): Point2 {
   return { x: obj.position.x + capOffset(obj, kind) / ASPECT, y: obj.position.y };
@@ -126,19 +126,67 @@ describe('build → drop', () => {
     expect(rig.commands('drop')).toHaveLength(0);
   });
 
-  it('a hand that vanishes while letting go (camera blur) still drops', () => {
+  /** An open hand (palm engaged), as when letting go. */
+  const openHand = (p: Point2) => ({ ...hand('Right', p, 'idle'), palm: gesture('held', p) });
+
+  /** The hand is gone from the camera for `ms`. */
+  const gone = (ms: number) => {
+    for (let t = 0; t < ms; t += FRAME_MS) rig.frame();
+  };
+
+  it('raising the hand out of the frame never drops by itself: the build holds', () => {
     const top = raise(0.9);
-    liftMove(top, { x: top.x, y: top.y + 0.1 }, 2, false);
-    rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.1 }, 'end', false));
+    const held = rig.engine.perf.build;
+    rig.frame(liftHand('Right', { x: top.x, y: 0.03 }, 'end', false));
+    gone(1500);
+    expect(rig.commands('drop')).toHaveLength(0);
+    expect(rig.engine.perf.build).toBeCloseTo(held);
+    expect(rig.controller.build?.lost).toBe(true);
+  });
+
+  it('a held build carries on when the hand comes back in the lift pose, and drops when it opens', () => {
+    const top = raise(0.9);
+    rig.frame(liftHand('Right', { x: top.x, y: 0.03 }, 'end', false));
+    gone(800);
+    // Back lower down, still in the lift pose: same build, nothing dropped or cancelled.
+    const back = { x: top.x, y: 0.4 };
+    for (let i = 0; i < 6; i++) rig.frame(liftHand('Right', back, i ? 'held' : 'start'));
+    expect(rig.commands('drop')).toHaveLength(0);
+    expect(rig.controller.build?.lost).toBeFalsy();
+    expect(rig.engine.perf.build).toBeGreaterThan(0.85);
+    rig.frame(liftHand('Right', back, 'end'));
     expect(rig.commands('drop')).toHaveLength(1);
   });
 
-  it('a hand raised out the top of the frame cancels instead of dropping', () => {
+  it('a hand that vanishes and comes back open counts as letting go (fast opening blurs the camera)', () => {
     const top = raise(0.9);
-    liftMove(top, { x: top.x, y: 0.02 }, 4, false);
-    rig.frame(liftHand('Right', { x: top.x, y: 0.02 }, 'end', false));
+    rig.frame(liftHand('Right', top, 'end', false));
+    gone(300);
+    for (let t = 0; t <= LET_GO_CONFIRM_MS + FRAME_MS; t += FRAME_MS) rig.frame(openHand(top));
+    expect(rig.commands('drop')).toHaveLength(1);
+    expect(rig.eventsOf('buildEnd').at(-1)!.dropped).toBe(true);
+  });
+
+  it('at the top edge, a hand that is still there but not open keeps holding (no drop by itself)', () => {
+    const top = raise(0.9);
+    const edge = { x: top.x, y: 0.1 };
+    liftMove(top, edge, 4);
+    rig.frame(liftHand('Right', edge, 'end')); // fingers clipped by the edge: the pose ends
+    for (let t = 0; t < BUILD_PARK_MS + 500; t += FRAME_MS) rig.frame(hand('Right', edge, 'idle'));
+    expect(rig.commands('drop')).toHaveLength(0);
+    expect(rig.controller.build?.lost).toBe(true);
+    // Actually letting go there (an open hand) drops.
+    for (let t = 0; t <= LET_GO_CONFIRM_MS + FRAME_MS; t += FRAME_MS) rig.frame(openHand(edge));
+    expect(rig.commands('drop')).toHaveLength(1);
+  });
+
+  it('a held build cancels if the hand never comes back', () => {
+    raise(0.9);
+    rig.frame(liftHand('Right', { x: 0.62, y: 0.03 }, 'end', false));
+    gone(BUILD_PARK_MS + 100);
     expect(rig.commands('drop')).toHaveLength(0);
     expect(rig.engine.perf.build).toBe(0);
+    expect(rig.controller.build).toBeNull();
   });
 
   it('starting high still reaches a full build inside the frame', () => {
