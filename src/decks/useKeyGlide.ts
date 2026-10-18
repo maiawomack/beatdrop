@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import type { AudioController, DeckId } from '../shared/contracts';
+import type { DeckId } from '../shared/types';
+import type { EngineStore } from './engineStore';
 import { clampRate } from './components/TempoFader';
 
 /** Crossfader: units per second (full range is 2), ramping up while held. */
@@ -23,7 +24,7 @@ export const GLIDE_ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowDown'];
  * Holding a crossfader or tempo key moves the slider smoothly every frame instead of
  * jumping in steps on key-repeat. Slow at first for precision, faster the longer you hold.
  */
-export function useKeyGlide(controller: AudioController, tempoKeys: Record<DeckId, { faster: string; slower: string }>) {
+export function useKeyGlide(engine: EngineStore, tempoKeys: Record<DeckId, { faster: string; slower: string }>) {
   useEffect(() => {
     const held = new Map<string, number>(); // key -> when it went down (ms)
     // Unsnapped values being glided, so passing through 1x or center doesn't stick.
@@ -40,7 +41,7 @@ export function useKeyGlide(controller: AudioController, tempoKeys: Record<DeckI
     const frame = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      const state = controller.getState();
+      const state = engine.getState();
       const heldSec = (key: string) => (now - (held.get(key) ?? now)) / 1000;
 
       const left = held.has('ArrowLeft');
@@ -54,7 +55,7 @@ export function useKeyGlide(controller: AudioController, tempoKeys: Record<DeckI
           const step = XF_CENTER_SPEED * dt;
           xf = Math.abs(xf) <= step ? 0 : xf - Math.sign(xf) * step;
         }
-        controller.dispatch({ type: 'mixer/setCrossfader', position: xf });
+        engine.dispatch({ type: 'SET_CROSSFADER', value: xf });
       } else {
         xf = null;
       }
@@ -69,7 +70,7 @@ export function useKeyGlide(controller: AudioController, tempoKeys: Record<DeckI
         const speed = ramp(TEMPO_SPEED_START, TEMPO_SPEED_MAX, TEMPO_RAMP_SEC, heldSec(key));
         const oct = clamp((octaves[deck] ?? Math.log2(state.decks[deck].playbackRate)) + dir * speed * dt, -1, 1);
         octaves[deck] = oct;
-        controller.dispatch({ type: 'deck/setRate', deck, rate: clampRate(2 ** oct) });
+        engine.dispatch({ type: 'SET_PLAYBACK_RATE', deck, rate: clampRate(2 ** oct) });
       }
 
       raf = held.size ? requestAnimationFrame(frame) : 0;
@@ -101,5 +102,5 @@ export function useKeyGlide(controller: AudioController, tempoKeys: Record<DeckI
       window.removeEventListener('keyup', onUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [controller, tempoKeys]);
+  }, [engine, tempoKeys]);
 }

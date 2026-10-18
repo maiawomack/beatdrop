@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AudioController } from '../shared/contracts';
+import type { EngineStore } from './engineStore';
 
 export interface Recorder {
   /** False when the engine can't provide its output (no record button then). */
@@ -14,8 +14,8 @@ export interface Recorder {
 const TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
 
 /** Records the master mix and downloads it when recording stops. */
-export function useRecorder(controller: AudioController): Recorder {
-  const available = typeof MediaRecorder !== 'undefined' && Boolean(controller.getOutputStream);
+export function useRecorder(engine: EngineStore): Recorder {
+  const available = typeof MediaRecorder !== 'undefined';
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -33,8 +33,7 @@ export function useRecorder(controller: AudioController): Recorder {
       recorder.current.stop();
       return;
     }
-    const stream = controller.getOutputStream?.();
-    if (!stream) return;
+    const stream = engine.engine.getOutputStream();
     const mimeType = TYPES.find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
     const rec = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 256_000 } : undefined);
     const chunks: Blob[] = [];
@@ -56,7 +55,7 @@ export function useRecorder(controller: AudioController): Recorder {
     rec.start(1000);
     recorder.current = rec;
     setRecording(true);
-  }, [controller]);
+  }, [engine]);
 
   return { available, recording, elapsed, toggle };
 }

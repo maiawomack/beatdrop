@@ -39,6 +39,8 @@ def clean_title(text: str) -> str:
     """Drop "(feat. ...)", "[Explicit]", "- Remastered 2011" style additions store files carry."""
     text = re.sub(r"[\(\[].*?[\)\]]", " ", text)
     text = re.sub(r"\s-\s.*(remaster|version|edit|mix|live).*$", " ", text, flags=re.IGNORECASE)
+    # Unbracketed featured artists, as in file names like "Song ft. Someone".
+    text = re.sub(r"\s(ft\.?|feat\.?|featuring)\s.*$", " ", text, flags=re.IGNORECASE)
     return " ".join(text.split())
 
 

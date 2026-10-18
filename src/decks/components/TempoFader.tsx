@@ -1,5 +1,6 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
-import type { AudioController, DeckState } from '../../shared/contracts';
+import type { DeckState } from '../../shared/types';
+import type { EngineStore } from '../engineStore';
 import { DECK_COLORS } from '../theme';
 
 const MIN_RATE = 0.5;
@@ -23,7 +24,7 @@ export function formatRate(rate: number): string {
 
 interface Props {
   deck: DeckState;
-  controller: AudioController;
+  engine: EngineStore;
   keys: { faster: string; slower: string };
 }
 
@@ -31,10 +32,10 @@ interface Props {
  * A turntable-style tempo fader beside the deck. The scale is in octaves so 0.5x,
  * 1x and 2x are evenly spaced (fine control around normal speed); up is faster.
  */
-export function TempoFader({ deck, controller, keys }: Props) {
+export function TempoFader({ deck, engine, keys }: Props) {
   const rate = deck.playbackRate;
   const octaves = Math.log2(rate); // -1 .. 1
-  const setRate = (r: number) => controller.dispatch({ type: 'deck/setRate', deck: deck.id, rate: clampRate(r) });
+  const setRate = (r: number) => engine.dispatch({ type: 'SET_PLAYBACK_RATE', deck: deck.id, rate: clampRate(r) });
 
   const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -74,9 +75,9 @@ export function TempoFader({ deck, controller, keys }: Props) {
       </button>
       {/* Live BPM at this speed, so you see the tempo change as you move the fader. */}
       <button className="tempo-readout" onClick={() => setRate(1)} title="Back to normal speed">
-        {deck.track ? (
+        {deck.bpm ? (
           <>
-            <b>{(deck.track.bpm * rate).toFixed(1)}</b>
+            <b>{(deck.bpm * rate).toFixed(1)}</b>
             <small>BPM</small>
           </>
         ) : (

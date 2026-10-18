@@ -25,6 +25,8 @@ export class AudioEngine {
   readonly ctx: AudioContext;
 
   private readonly master: GainNode;
+  /** Copy of the master mix as a MediaStream, for recording sets. */
+  private readonly recordTap: MediaStreamAudioDestinationNode;
   private readonly channels: Record<DeckId, DeckChannel>;
   private readonly state: AudioEngineState;
   private readonly listeners = new Set<Listener>();
@@ -35,6 +37,8 @@ export class AudioEngine {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
+    this.recordTap = this.ctx.createMediaStreamDestination();
+    this.master.connect(this.recordTap);
 
     this.channels = {
       A: new DeckChannel(this.ctx, this.master),
@@ -75,6 +79,17 @@ export class AudioEngine {
   /** Live playhead position in seconds — cheap enough to call every animation frame. */
   getPositionSec(deck: DeckId): number {
     return this.channels[deck].position();
+  }
+
+  /** Live output level per stem, 0..1, for meters (all zero while paused). */
+  getLevels(deck: DeckId): Record<StemId, number> {
+    return this.channels[deck].levels();
+  }
+
+  /** The master mix as a MediaStream, e.g. for MediaRecorder. */
+  getOutputStream(): MediaStream {
+    void this.resume();
+    return this.recordTap.stream;
   }
 
   async dispatch(cmd: AudioCommand): Promise<void> {

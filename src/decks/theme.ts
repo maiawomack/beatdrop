@@ -1,4 +1,4 @@
-import type { DeckId, StemId } from '../shared/contracts';
+import type { DeckId, StemId } from '../shared/types';
 
 // Colors from the design sketch. Keep in sync with the CSS variables in theme.css.
 export const TEAL = '#4fd9d2';

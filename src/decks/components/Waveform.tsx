@@ -1,5 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { STEM_IDS, type AudioController, type DeckState } from '../../shared/contracts';
+import { STEM_IDS, type DeckState } from '../../shared/types';
+import type { EngineStore } from '../engineStore';
 import type { TrackWaveform } from '../../stems';
 import { useAnimationFrame } from '../hooks';
 import { DECK_COLORS, ORANGE, STEM_COLORS } from '../theme';
@@ -33,7 +34,7 @@ function normFor(waveform: TrackWaveform): number {
 
 interface Props {
   deck: DeckState;
-  controller: AudioController;
+  engine: EngineStore;
   waveform: TrackWaveform | null;
 }
 
@@ -41,7 +42,7 @@ interface Props {
  * One lane per stem, scrolling past a fixed center playhead. Lane height follows the
  * stem's volume and a muted stem goes grey, so gestures on Monitor 2 show up here.
  */
-export function Waveform({ deck, controller, waveform }: Props) {
+export function Waveform({ deck, engine, waveform, firstBeatSec }: Props & { firstBeatSec: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useAnimationFrame(() => {
@@ -59,12 +60,12 @@ export function Waveform({ deck, controller, waveform }: Props) {
     for (let i = 1; i < STEM_IDS.length; i++) g.fillRect(0, Math.round(i * laneH), w, dpr);
 
     if (!waveform || !deck.track) return;
-    const pos = controller.getPosition(deck.id);
+    const pos = engine.position(deck.id);
     const pxPerSec = w / WINDOW_SEC;
 
     // Beat grid: every beat light, every bar (4 beats) a bit stronger.
-    const { bpm, firstBeatSec } = deck.track;
-    if (bpm > 0) {
+    const { bpm } = deck;
+    if (bpm && bpm > 0) {
       const beat = 60 / bpm;
       const startK = Math.ceil((pos - WINDOW_SEC / 2 - firstBeatSec) / beat);
       const endK = Math.floor((pos + WINDOW_SEC / 2 - firstBeatSec) / beat);
@@ -80,7 +81,7 @@ export function Waveform({ deck, controller, waveform }: Props) {
     const norm = normFor(waveform);
     STEM_IDS.forEach((stem, lane) => {
       const peaks = waveform.stems[stem];
-      const { volume, muted } = deck.stems[stem];
+      const { gain: volume, muted } = deck.stems[stem];
       const mid = laneH * lane + laneH / 2;
       const maxH = laneH / 2 - 4 * dpr;
       const scale = muted ? 0.35 : volume;
@@ -136,7 +137,7 @@ export function Waveform({ deck, controller, waveform }: Props) {
 }
 
 /** Whole-track overview with progress; click to seek. */
-export function Overview({ deck, controller, waveform }: Props) {
+export function Overview({ deck, engine, waveform }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const shape = useRef<HTMLCanvasElement | null>(null);
 
@@ -150,7 +151,18 @@ export function Overview({ deck, controller, waveform }: Props) {
     if (!canvas || !g) return;
     const { width: w, height: h } = canvas;
     g.clearRect(0, 0, w, h);
-    if (!waveform || !deck.track) return;
+    if (!deck.track || !deck.durationSec) return;
+    const px = (engine.position(deck.id) / deck.durationSec) * w;
+    if (!waveform) {
+      // Full mix (not split yet): no peaks, just a progress bar.
+      g.fillStyle = '#3a3a44';
+      g.fillRect(0, h / 2 - 2, w, 4);
+      g.fillStyle = DECK_COLORS[deck.id];
+      g.fillRect(0, h / 2 - 2, px, 4);
+      g.fillStyle = ORANGE;
+      g.fillRect(Math.round(px), 0, 2, h);
+      return;
+    }
 
     if (!shape.current || shape.current.width !== w || shape.current.height !== h) {
       const off = document.createElement('canvas');
@@ -171,7 +183,6 @@ export function Overview({ deck, controller, waveform }: Props) {
     }
 
     // Tint the shape: played part in mane blue, the rest in light sky.
-    const px = (controller.getPosition(deck.id) / deck.track.durationSec) * w;
     g.drawImage(shape.current, 0, 0);
     g.globalCompositeOperation = 'source-in';
     g.fillStyle = '#3a2c48';
@@ -184,10 +195,10 @@ export function Overview({ deck, controller, waveform }: Props) {
   });
 
   const seek = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!deck.track) return;
+    if (!deck.track || !deck.durationSec) return;
     const box = e.currentTarget.getBoundingClientRect();
     const fraction = (e.clientX - box.left) / box.width;
-    controller.dispatch({ type: 'deck/seek', deck: deck.id, timeSec: fraction * deck.track.durationSec });
+    engine.dispatch({ type: 'SEEK', deck: deck.id, positionSec: fraction * deck.durationSec });
   };
 
   return (

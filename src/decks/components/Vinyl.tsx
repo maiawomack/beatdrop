@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
-import type { AudioController, DeckState } from '../../shared/contracts';
+import type { DeckState } from '../../shared/types';
+import type { EngineStore } from '../engineStore';
 import { useAnimationFrame } from '../hooks';
 import { DECK_COLORS } from '../theme';
 
@@ -111,17 +112,21 @@ function paintRecord(canvas: HTMLCanvasElement, seed: number) {
 /** A realistic record half off the screen edge; the thin outer arc shows progress. */
 interface Props {
   deck: DeckState;
-  controller: AudioController;
+  engine: EngineStore;
+  /** Beat-grid phase from the stems manifest (0 when unknown). */
+  firstBeatSec: number;
   /** Mixer crossfader, -1 (A) .. 1 (B): scales how hard this record pulses. */
   crossfader: number;
 }
 
-export function Vinyl({ deck, controller, crossfader }: Props) {
+export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
   const pulseRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<SVGCircleElement>(null);
   const surface = useRef<HTMLCanvasElement>(null);
   const side = deck.id === 'A' ? 'left' : 'right';
-  const title = deck.track ? `${deck.track.title} · ${deck.track.artist}` : 'Beatdrop Records · Promo Copy';
+  const title = deck.track
+    ? [deck.track.title, ...deck.track.artists.slice(0, 2)].join(' · ')
+    : 'Beatdrop Records · Promo Copy';
 
   useEffect(() => {
     const canvas = surface.current;
@@ -134,10 +139,10 @@ export function Vinyl({ deck, controller, crossfader }: Props) {
   }, [deck.id]);
 
   useAnimationFrame(() => {
-    const pos = controller.getPosition(deck.id);
+    const pos = engine.position(deck.id);
     const el = progressRef.current;
     if (el) {
-      const duration = deck.track?.durationSec ?? 0;
+      const duration = deck.durationSec;
       el.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - (duration ? pos / duration : 0)));
     }
 
@@ -148,7 +153,7 @@ export function Vinyl({ deck, controller, crossfader }: Props) {
     if (!pulse) return;
     const angle = ((crossfader + 1) / 4) * Math.PI;
     const weight = deck.id === 'A' ? Math.cos(angle) : Math.sin(angle);
-    const beat = deck.playing && deck.track ? beatPulse(pos, deck.track.bpm, deck.track.firstBeatSec) * weight : 0;
+    const beat = deck.playing && deck.bpm ? beatPulse(pos, deck.bpm, firstBeatSec) * weight : 0;
     pulse.style.transform = `scale(${1 + beat * PULSE_SCALE})`;
     pulse.style.setProperty('--beat', beat.toFixed(3));
   });

@@ -1,17 +1,18 @@
 import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import type { ApplicationState, AudioController, DeckId } from '../../shared/contracts';
+import type { AudioEngineState, DeckId } from '../../shared/types';
+import type { EngineStore } from '../engineStore';
 import { lyricLineAt, type TrackLyrics } from '../../stems';
 import { useAnimationFrame } from '../hooks';
 import { DECK_COLORS } from '../theme';
 
 interface Props {
-  state: ApplicationState;
-  controller: AudioController;
+  state: AudioEngineState;
+  engine: EngineStore;
   lyrics: Record<DeckId, TrackLyrics | null>;
 }
 
 /** Crossfader in the middle, each deck's current lyric line on its side. */
-export function MixerStrip({ state, controller, lyrics }: Props) {
+export function MixerStrip({ state, engine, lyrics }: Props) {
   const x = state.mixer.crossfader;
 
   const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -19,7 +20,7 @@ export function MixerStrip({ state, controller, lyrics }: Props) {
     const apply = (clientX: number) => {
       const box = target.getBoundingClientRect();
       const position = ((clientX - box.left) / box.width) * 2 - 1;
-      controller.dispatch({ type: 'mixer/setCrossfader', position: Math.abs(position) < 0.04 ? 0 : position });
+      engine.dispatch({ type: 'SET_CROSSFADER', value: Math.abs(position) < 0.04 ? 0 : position });
     };
     target.setPointerCapture(e.pointerId);
     apply(e.clientX);
@@ -32,7 +33,7 @@ export function MixerStrip({ state, controller, lyrics }: Props) {
 
   return (
     <section className="mixer">
-      <LyricLine deck="A" lyrics={lyrics.A} controller={controller} />
+      <LyricLine deck="A" lyrics={lyrics.A} engine={engine} />
       <div className="xfader">
         <span
           className="side"
@@ -55,12 +56,12 @@ export function MixerStrip({ state, controller, lyrics }: Props) {
           <kbd>←</kbd> <kbd>→</kbd> crossfade · <kbd>↓</kbd> center
         </div>
       </div>
-      <LyricLine deck="B" lyrics={lyrics.B} controller={controller} />
+      <LyricLine deck="B" lyrics={lyrics.B} engine={engine} />
     </section>
   );
 }
 
-function LyricLine({ deck, lyrics, controller }: { deck: DeckId; lyrics: TrackLyrics | null; controller: AudioController }) {
+function LyricLine({ deck, lyrics, engine }: { deck: DeckId; lyrics: TrackLyrics | null; engine: EngineStore }) {
   const nowRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLDivElement>(null);
   const shown = useRef(-2);
@@ -79,7 +80,7 @@ function LyricLine({ deck, lyrics, controller }: { deck: DeckId; lyrics: TrackLy
       }
       return;
     }
-    const i = lyricLineAt(lyrics, controller.getPosition(deck));
+    const i = lyricLineAt(lyrics, engine.position(deck));
     if (i === shown.current) return; // only touch the DOM when the line changes
     shown.current = i;
     nowRef.current.textContent = lyrics.lines[i]?.text || (i >= 0 ? '♪' : '');

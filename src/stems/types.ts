@@ -1,8 +1,8 @@
 // Data contract for prepared stems (Task 5). Produced by tools/stems/prepare_stems.py,
 // consumed by the audio engine (Task 1) and the DJ UI waveforms (Task 3).
 //
-// STEM_IDS / StemId mirror the shared StemId contract in CLAUDE.md. If the team's
-// shared contracts module lands, re-export StemId from there instead of redefining it.
+// STEM_IDS / StemId are defined here once; src/shared/types.ts re-exports them for
+// the rest of the app.
 
 export const STEM_IDS = ['vocals', 'drums', 'bass', 'instrumental'] as const;
 
