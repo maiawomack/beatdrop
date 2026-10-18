@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useState, type CSSProperties } from 'react';
 import type { DeckState, StemId, TrackInfo } from '../../shared/types';
 import type { EngineStore } from '../engineStore';
-import { formatTime, useAnimationFrame, type TrackExtras } from '../hooks';
+import { formatTime, trackLabel, useAnimationFrame, type TrackExtras } from '../hooks';
 import { DECK_COLORS } from '../theme';
 import { DeckSearch, type DeckSearchHandle } from './DeckSearch';
 import { StemBars } from './StemBars';
@@ -11,6 +11,7 @@ export interface DeckKeys {
   play: string;
   stop: string;
   cue: string;
+  skip: string;
   mute: Record<StemId, string>;
 }
 
@@ -20,7 +21,15 @@ interface Props {
   extras: TrackExtras;
   keys: DeckKeys;
   serverReady: boolean | null;
+  /** Songs waiting to play on this deck, next first. */
+  queue: TrackInfo[];
+  onQueue(track: TrackInfo): void;
+  onUnqueue(index: number): void;
+  onSkip(): void;
 }
+
+/** Queued songs shown by name; the rest are counted. */
+const QUEUE_SHOWN = 3;
 
 /** Stop = pause and rewind to the start (two commands; no separate engine command needed). */
 export function stopDeck(engine: EngineStore, deck: DeckState['id']) {
@@ -42,7 +51,7 @@ async function loadOntoDeck(engine: EngineStore, deck: DeckState, track: TrackIn
 }
 
 export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(props, searchRef) {
-  const { deck, engine, extras, keys, serverReady } = props;
+  const { deck, engine, extras, keys, serverReady, queue, onQueue, onUnqueue, onSkip } = props;
   const elapsedRef = useRef<HTMLSpanElement>(null);
   const remainingRef = useRef<HTMLSpanElement>(null);
   const search = useRef<DeckSearchHandle | null>(null);
@@ -84,6 +93,7 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
         current={deck.track}
         serverReady={serverReady}
         onLoad={(t) => void loadOntoDeck(engine, deck, t)}
+        onQueue={onQueue}
       />
 
       <div className="deck-row">
@@ -133,6 +143,37 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
           Cue
           <kbd>{keys.cue}</kbd>
         </button>
+        <button
+          className="pill"
+          onClick={onSkip}
+          disabled={queue.length === 0}
+          title={queue.length ? `Skip to ${trackLabel(queue[0]!)}` : 'Queue a song to skip to it'}
+        >
+          <svg viewBox="0 0 20 20"><path d="M3.5 4 Q 3 3.4 4 3.8 L 12 9.3 Q 12.8 10 12 10.7 L 4 16.2 Q 3 16.6 3.5 16 Z" /><rect x="13.9" y="3.5" width="2.6" height="13" rx="1.3" /></svg>
+          Skip
+          <kbd>{keys.skip}</kbd>
+        </button>
+      </div>
+
+      <div className="queue" aria-label={`Deck ${deck.id} queue`}>
+        <span className="queue-label">Queue</span>
+        {queue.length === 0 ? (
+          <span className="queue-empty">empty · Ctrl+Enter in search adds songs</span>
+        ) : (
+          <>
+            <ol>
+              {queue.slice(0, QUEUE_SHOWN).map((t, i) => (
+                <li key={`${t.id}-${i}`} title={i === 0 ? `Next: ${trackLabel(t)}` : trackLabel(t)}>
+                  <span>{t.title}</span>
+                  <button onClick={() => onUnqueue(i)} aria-label={`Remove ${t.title} from the queue`}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {queue.length > QUEUE_SHOWN && <span className="queue-more">+{queue.length - QUEUE_SHOWN} more</span>}
+          </>
+        )}
       </div>
 
       <div className="screen">

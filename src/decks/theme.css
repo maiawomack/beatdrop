@@ -311,7 +311,7 @@ kbd {
 
 .deck {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   gap: 10px;
   min-height: 0;
   padding: 14px 14px 12px;
@@ -414,10 +414,10 @@ kbd {
 
 .results li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   grid-template-areas:
-    'title num dur src'
-    'artist num dur src';
+    'title num dur queue src'
+    'artist num dur queue src';
   align-items: center;
   column-gap: 14px;
   padding: 8px 14px;
@@ -539,7 +539,7 @@ kbd {
 
 .transport {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1201,6 +1201,107 @@ kbd {
 .r-source {
   grid-area: src;
   justify-self: end;
+}
+
+/* "+ Queue" on each search result. */
+.results .queue-add {
+  grid-area: queue;
+  padding: 3px 10px;
+  border: 1.5px solid color-mix(in srgb, var(--deck) 70%, #000);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-block);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.results .queue-add:hover,
+.results .queue-add.done {
+  background: var(--deck);
+}
+
+/* ------------------------------------------------------------------ queue */
+
+.queue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  overflow: hidden;
+  font-family: var(--font-block);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.queue-label {
+  flex: none;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.queue-empty {
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.queue ol {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.queue li:first-child {
+  background: color-mix(in srgb, var(--deck) 45%, rgba(0, 0, 0, 0.4));
+}
+
+.queue li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue li button {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.queue li button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+.queue-more {
+  flex: none;
+  opacity: 0.6;
 }
 
 .badge-stems,

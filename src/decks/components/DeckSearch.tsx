@@ -17,6 +17,8 @@ interface Props {
   current: TrackInfo | null;
   serverReady: boolean | null;
   onLoad(track: TrackInfo): void;
+  /** Adds the song to this deck's queue instead of loading it now. */
+  onQueue(track: TrackInfo): void;
 }
 
 interface Job {
@@ -62,10 +64,12 @@ async function loadCatalog(signal: AbortSignal): Promise<TrackInfo[]> {
 
 /**
  * The deck's search bar. Idle, it shows the loaded song. Type to filter; Enter loads,
- * Shift+Enter (or the Split button) splits a full-mix song into stems first.
+ * Ctrl+Enter (or + Queue) adds to the deck's queue, Shift+Enter (or the Split button)
+ * splits a full-mix song into stems first.
  */
 export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearch(props, ref) {
-  const { deck, current, serverReady, onLoad } = props;
+  const { deck, current, serverReady, onLoad, onQueue } = props;
+  const [queued, setQueued] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
@@ -151,9 +155,19 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
     }
   };
 
+  /** Queues a result and keeps the search open, so several songs can be queued in a row. */
+  const queue = (index: number) => {
+    const track = results[index];
+    if (!track) return;
+    onQueue(track);
+    setQueued(track.id);
+    setTimeout(() => setQueued((id) => (id === track.id ? null : id)), 900);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') setHighlight((i) => Math.min(uploadRow, i + 1));
     else if (e.key === 'ArrowUp') setHighlight((i) => Math.max(0, i - 1));
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) queue(highlight);
     else if (e.key === 'Enter') choose(highlight, e.shiftKey);
     else if (e.key === 'Escape') close();
     else return;
@@ -219,6 +233,16 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
               <span className="r-artist">{t.artists.join(', ') || t.fileName}</span>
               <span className="r-num">{t.bpm ? t.bpm.toFixed(1) : '—'}</span>
               <span className="r-num dim">{t.durationMs ? formatTime(t.durationMs / 1000) : ''}</span>
+              <button
+                className={`queue-add${queued === t.id ? ' done' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  queue(i);
+                }}
+                title={`Add to deck ${deck}'s queue (Ctrl+Enter)`}
+              >
+                {queued === t.id ? '✓ Queued' : '+ Queue'}
+              </button>
               <span className="r-source">
                 {t.stemsManifestUrl ? (
                   <span className="badge-stems">stems</span>
@@ -246,7 +270,9 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
           >
             + Split a song file from your computer
             <span className="r-artist">
-              {serverReady === false ? 'separation server offline' : 'or drop a file on this deck · Shift+Enter splits a full mix'}
+              {serverReady === false
+                ? 'separation server offline'
+                : 'or drop a file on this deck · Shift+Enter splits a full mix · Ctrl+Enter queues'}
             </span>
           </li>
         </ul>
