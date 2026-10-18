@@ -1,4 +1,13 @@
-# BeatDrop
+<p align="center">
+  <img src="docs/banner.svg" alt="BeatDrop: DJ with your hands" width="100%">
+</p>
+
+<p align="center">
+  <img alt="Two decks" src="https://img.shields.io/badge/decks-A_%2B_B-4fd9d2?style=flat-square&labelColor=16161a">
+  <img alt="Four stems per song" src="https://img.shields.io/badge/stems-vocals_%C2%B7_drums_%C2%B7_bass_%C2%B7_inst-c47be8?style=flat-square&labelColor=16161a">
+  <img alt="Hand tracking with MediaPipe" src="https://img.shields.io/badge/hands-MediaPipe-f27a2c?style=flat-square&labelColor=16161a">
+  <img alt="Web Audio" src="https://img.shields.io/badge/audio-Web_Audio-4a6bf0?style=flat-square&labelColor=16161a">
+</p>
 
 BeatDrop is a DJ setup you play with your hands. A webcam tracks both hands, and you mix two
 songs by scratching, changing tempo, crossfading and riding stem volumes in the air, with no
