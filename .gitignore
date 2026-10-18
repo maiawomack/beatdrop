@@ -1,3 +1,9 @@
+node_modules/
+dist/
+.env*
+*.log
+.DS_Store
+
 # Python environments
 .venv/
 .venv-demucs/
@@ -5,9 +11,3 @@ __pycache__/
 
 # Generated stems (large, often copyrighted) -- regenerate with tools/stems/prepare_stems.py
 /public/stems/
-
-.DS_Store
-node_modules/
-
-# Frontend
-dist/
