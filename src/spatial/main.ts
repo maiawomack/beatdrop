@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { syncClips } from '../ar/clips';
-import { deckPositions, syncDeckStems } from '../ar/decks';
+import { DeckControlsRenderer } from '../ar/DeckControlsRenderer';
+import { crossfadeZone, deckPositions, syncDeckStems, syncPlatters } from '../ar/decks';
 import { DriftField } from '../ar/DriftField';
 import { stemView, type HoloObject } from '../ar/HoloObject';
 import { InteractionController } from '../ar/InteractionController';
@@ -54,9 +55,15 @@ function fitStage(): void {
 
 function describe(hand: HandState | undefined): string {
   if (!hand) return '—';
-  const { phase } = hand[GRAB_GESTURE];
   const status = hand.tracked ? '' : ' (lost)';
-  return `${phase.padEnd(5)} grip ${hand.grip.ratio.toFixed(2)}  pinch ${hand.pinch.ratio.toFixed(2)}${status}`;
+  const ok = (b: boolean | undefined) => (b ? '✓' : '✗');
+  // Live gesture checks, for tuning. Scratch = open palm ✓ (needs > 1.00) with fingers not hanging down.
+  const open = hand.palm ? 2 - hand.palm.ratio : 0;
+  return (
+    `palm ${open.toFixed(2)}${ok(hand.palm?.active)}  fingers-down ${ok(hand.fingersDown)}  ` +
+    `pinch ${hand.pinch.ratio.toFixed(2)}${ok(hand.pinch.active)}  fingers-up ${ok(hand.twoUp?.active)}  ` +
+    `lift ${ok(hand.lift?.active)}  fist ${ok(hand.grip.active)}${status}`
+  );
 }
 
 /**
@@ -71,7 +78,7 @@ function syncFromEngine(objects: HoloObject[], engine: AudioStateSource, interac
     obj.audio = stemView(s);
     if (!obj.stretch) obj.stretchAmount = s.fx;
   }
-  interaction.perfView = { dropPending: engine.perf.dropPending };
+  interaction.perfView = { dropPending: engine.perf.dropPending, crossfader: engine.perf.crossfader, tempo: engine.perf.tempo };
 }
 
 /** Compact musical status: each deck's song and tempo, plus the lead deck's bar.beat lights. */
@@ -256,6 +263,8 @@ async function main(): Promise<void> {
   const waveSource = createTask1Waveforms(engine, audio);
   const waveforms = new WaveformRenderer(waveSource);
   const neon = new NeonScene();
+  const deckControls = new DeckControlsRenderer();
+  interaction.crossfadeZone = crossfadeZone(aspect0);
 
   // Browsers only allow audio to start from a user gesture.
   startButton.hidden = false;
@@ -327,10 +336,7 @@ async function main(): Promise<void> {
       const anyPlaying = ready.some((d) => audio.state.decks[d].playing);
       for (const deck of ready) void engine.dispatch({ type: anyPlaying ? 'PAUSE' : 'PLAY', deck });
     }
-    // 1-9 mute holograms in order (e.code so Shift doesn't turn "1" into "!").
-    const digit = /^Digit([1-9])$/.exec(e.code);
-    const obj = digit ? stems[Number(digit[1]) - 1] : undefined;
-    if (obj) audio.dispatch({ type: 'setMute', stemId: obj.id, value: !audio.stems.get(obj.id)?.muted });
+
   });
 
   window.addEventListener('keyup', (e) => {
@@ -380,6 +386,15 @@ async function main(): Promise<void> {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     neon.drawBackground(ctx);
     waveforms.render(ctx, display, now, { backdrop: video });
+    deckControls.render(
+      ctx,
+      interaction.platters,
+      interaction.crossfadeZone,
+      interaction.crossfadeValue ?? audio.perf.crossfader,
+      (d) => engine.getPositionSec(d),
+      interaction.tempoStrips,
+      (d) => ({ rate: audio.state.decks[d].playbackRate, bpm: audio.state.decks[d].bpm }),
+    );
     neon.drawForeground(ctx, scene);
     if (lastFrame) drawHandOverlay(ctx, lastFrame, GRAB_GESTURE, interaction.handModes);
     if (banner) drawBanner(banner.title, banner.detail);
@@ -390,6 +405,7 @@ async function main(): Promise<void> {
   pipeline.onFrame((frame) => {
     const aspect = video.videoWidth / video.videoHeight;
     syncDeckStems(audio, interaction, aspect, titleOf);
+    syncPlatters(audio, interaction, aspect);
     syncClips(audio, interaction);
     syncFromEngine(stems, audio, interaction);
     interaction.setAspect(aspect);
@@ -449,7 +465,7 @@ async function main(): Promise<void> {
     const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
     hud.textContent =
       `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   engine: ${engine.mode}${engine.connected ? '' : ' (lost)'}   audio: ${engine.audioState}\n` +
-      `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [1-9] mute  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record  [H] hide\n` +
+      `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record  [H] hide\n` +
       `modes  ${modes}\n${perfLine}\n` +
       `Left : ${describe(byId('Left'))}\n` +
       `Right: ${describe(byId('Right'))}\n` +

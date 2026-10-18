@@ -112,11 +112,11 @@ export class WaveformRenderer {
       if (!this.source.peaks(obj.id, this.peaks, t)) this.peaks.fill(0.05);
       this.shapeForFilter(obj.audio.filter);
       if (!obj.locked) this.drawTrail(ctx, obj, frame, vis);
-      this.drawReflection(ctx, obj, frame, vis);
+      if (!obj.vertical) this.drawReflection(ctx, obj, frame, vis);
       this.drawBody(ctx, obj, frame, vis, t, opts);
       if (!obj.stretch && !obj.returning) {
         if (hasCap(obj, 'loop')) this.drawCap(ctx, obj, frame, vis, 'loop', t);
-        this.drawCap(ctx, obj, frame, vis, 'filter', t);
+        if (hasCap(obj, 'filter')) this.drawCap(ctx, obj, frame, vis, 'filter', t);
       }
       if (obj.clipPreview) this.drawClipGhost(ctx, obj, vis);
       if (obj.twist !== null) this.drawTwistDial(ctx, obj);
@@ -153,10 +153,12 @@ export class WaveformRenderer {
     const flash = Math.max(0, 1 - (vis.lastT - vis.grabAt) / FLASH_MS);
     // Slight squeeze as the hand closes, then a springy pop on grab.
     // The stem you're working with grows; the others step back.
-    const scale =
-      (1 + 0.03 * vis.hover - 0.03 * vis.intent * (1 - vis.grab) + 0.05 * flash * flash + 0.12 * this.impact) *
-      (1 + 0.12 * vis.focus - 0.1 * vis.recede) *
-      (1 - 0.8 * vis.ret);
+    // Fader bars hold their shape (no hover / grab / focus wobble); they react with glow and fill instead.
+    const scale = obj.locked
+      ? 1
+      : (1 + 0.03 * vis.hover - 0.03 * vis.intent * (1 - vis.grab) + 0.05 * flash * flash + 0.12 * this.impact) *
+        (1 + 0.12 * vis.focus - 0.1 * vis.recede) *
+        (1 - 0.8 * vis.ret);
     const W = effectiveHalfWidth(obj) * 2 * ch * scale;
     // Locked stems stretch taller; free ones stretch wider (and get a little thinner).
     const H = obj.locked
@@ -176,7 +178,7 @@ export class WaveformRenderer {
 
     const c = viewToPixels({ x: obj.position.x + obj.drift.x, y: obj.position.y + obj.drift.y }, cw, ch);
     // Charged stems shiver slightly with the build.
-    if (this.energy > 0.05) {
+    if (this.energy > 0.05 && !obj.locked) {
       const amp = (ch / 720) * 2.2 * this.energy * this.energy;
       c.x += amp * Math.sin(vis.lastT * 0.061 + obj.id.length * 1.7);
       c.y += amp * Math.cos(vis.lastT * 0.073 + obj.id.length);
@@ -209,8 +211,8 @@ export class WaveformRenderer {
   }
 
   private waveGeometry(obj: HoloObject, f: BodyFrame, live: number): { x0: number; x1: number; amp: number } {
-    // Height reflects the fader so level changes are visible at a glance.
-    const level = 0.3 + 0.7 * obj.audio.volume;
+    // Height reflects the fader so level changes are visible at a glance (bars show it as their fill instead).
+    const level = obj.vertical ? 1 : 0.3 + 0.7 * obj.audio.volume;
     const charge = 1 + 0.35 * this.energy + 0.3 * this.impact;
     return {
       x0: -f.W / 2 + f.H * 0.45,
@@ -304,7 +306,7 @@ export class WaveformRenderer {
 
     // Subtle flash on grab.
     const age = (vis.lastT - vis.grabAt) / FLASH_MS;
-    if (age >= 0 && age < 1 && holders.length) {
+    if (age >= 0 && age < 1 && holders.length && !obj.locked) {
       const grow = 1 + 0.15 * easeOut(age);
       ctx.save();
       ctx.scale(grow, 1 + (grow - 1) * 2);
@@ -319,7 +321,14 @@ export class WaveformRenderer {
     // Bars draw the same waveform turned upright (time runs bottom to top).
     const wf = obj.vertical ? { ...f, W: H, H: W } : f;
     ctx.save();
-    if (obj.vertical) ctx.rotate(-Math.PI / 2);
+    if (obj.vertical) {
+      // Fader bar: the waveform only shows in the filled part, so it rises and falls with the volume.
+      const vol = obj.volumeAdjust ?? obj.audio.volume;
+      ctx.beginPath();
+      ctx.rect(-W / 2, H / 2 - vol * H, W, vol * H);
+      ctx.clip();
+      ctx.rotate(-Math.PI / 2);
+    }
     const { x0, x1, amp } = this.waveGeometry(obj, wf, live);
 
     // Depth layers: larger, fainter, slightly offset copies behind the main one.
@@ -391,7 +400,7 @@ export class WaveformRenderer {
     if (obj.locked) this.drawVolumeFill(ctx, obj, W, H, base, u);
 
     if (obj.vertical) {
-      this.drawBarLabels(ctx, obj, H, vis, bright, u);
+      this.drawBarLabels(ctx, obj, H, bright, u);
       ctx.restore();
       return;
     }
@@ -661,23 +670,24 @@ export class WaveformRenderer {
   }
 
   /** Bar labels: name centered above the filter cap, status centered below the loop cap. */
-  private drawBarLabels(ctx: CanvasRenderingContext2D, obj: HoloObject, H: number, vis: VisualState, bright: RGB, u: number): void {
+  private drawBarLabels(ctx: CanvasRenderingContext2D, obj: HoloObject, H: number, bright: RGB, u: number): void {
     const ch = ctx.canvas.height;
     const fs = u * 11;
-    const capSpan = (CAP_GAP + CAP_RADIUS) * ch;
+    // Bars may still have caps later (pinch controls); leave room for them if so.
+    const capSpan = hasCap(obj, 'filter') ? (CAP_GAP + 2 * CAP_RADIUS) * ch : 0;
     ctx.font = `600 ${fs}px ui-monospace, "SF Mono", Menlo, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     setLetterSpacing(ctx, `${(fs * 0.1).toFixed(1)}px`);
     ctx.fillStyle = rgba(bright, 0.9);
-    ctx.fillText(obj.label.toUpperCase(), 0, -H / 2 - capSpan - CAP_RADIUS * ch - fs * 0.9);
-    const status = statusText(obj);
-    const text = [status, performanceText(obj)].filter(Boolean).join(' · ');
-    const alpha = text ? 0.9 : Math.max(vis.hover, vis.grab) * 0.8;
-    if (alpha > 0.02 && text) {
-      ctx.font = `600 ${fs * 0.9}px ui-monospace, "SF Mono", Menlo, monospace`;
-      ctx.fillStyle = `rgba(230,236,255,${alpha.toFixed(3)})`;
-      ctx.fillText(text, 0, H / 2 + capSpan + CAP_RADIUS * ch + fs);
+    const labelY = -H / 2 - capSpan - fs * 0.9;
+    ctx.fillText(obj.label.toUpperCase(), 0, labelY);
+    // Status (MUTED, loop/filter set from the decks screen) on a line above the name.
+    const text = [statusText(obj), performanceText(obj)].filter(Boolean).join(' · ');
+    if (text) {
+      ctx.font = `600 ${fs * 0.85}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.fillStyle = 'rgba(230,236,255,0.85)';
+      ctx.fillText(text, 0, labelY - fs * 1.3);
     }
     setLetterSpacing(ctx, '0px');
   }
@@ -706,6 +716,20 @@ export class WaveformRenderer {
     ctx.lineTo(W / 2, top);
     ctx.stroke();
     ctx.restore();
+    if (obj.vertical) {
+      // Grab handle: pinch here (it lights up when a hand is near).
+      const hover = Math.max(obj.hover, active ? 1 : 0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(-W / 2 - u * 5, top - u * 4, W + u * 10, u * 8, u * 4);
+      ctx.fillStyle = rgba(mixRgb(base, [255, 255, 255], 0.55), 0.35 + 0.6 * hover);
+      if (hover > 0.05) {
+        ctx.shadowColor = rgba(base, 1);
+        ctx.shadowBlur = u * 12 * hover;
+      }
+      ctx.fill();
+      ctx.restore();
+    }
     if (active) {
       const fs = Math.max(u * 12, H * 0.22);
       ctx.save();
@@ -715,7 +739,9 @@ export class WaveformRenderer {
       ctx.fillStyle = 'rgba(240,244,255,0.95)';
       ctx.shadowColor = rgba(base, 1);
       ctx.shadowBlur = u * 8;
-      ctx.fillText(`VOL ${Math.round(vol * 100)}`, 0, 0);
+      // Just above the fill line (bars), or centered (lying stems).
+      const y = obj.vertical ? Math.max(-H / 2 + fs * 0.7, top - fs * 0.8) : 0;
+      ctx.fillText(`VOL ${Math.round(vol * 100)}`, 0, y);
       ctx.restore();
     }
   }

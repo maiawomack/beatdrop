@@ -100,6 +100,13 @@ export class MockAudioEngine implements AudioCommandSink, AudioStateSource {
       }
       const anySolo = [...this.stems.values()].some((s) => s.solo);
       for (const s of this.stems.values()) s.audible = !s.muted && (!anySolo || s.solo);
+    } else if (command.type === 'setCrossfader') {
+      this.perf.crossfader = clamp(command.value, -1, 1);
+    } else if (command.type === 'setTempo') {
+      this.perf.tempo = { ...this.perf.tempo, [command.deck]: clamp(command.rate, 0.5, 2) };
+    } else if (command.type === 'scratch') {
+      const on = this.perf.scratching.filter((d) => d !== command.deck);
+      this.perf.scratching = command.phase === 'end' ? on : [...on, command.deck];
     } else if (command.type === 'setBuild') {
       if (!this.perf.dropPending) this.perf.build = clamp(command.value, 0, 1);
     } else if (command.type === 'drop') {

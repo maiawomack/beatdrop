@@ -311,6 +311,7 @@ export function emptyEngineState(): AudioEngineState {
     bpmSource: null,
     channelFilter: {},
     clips: {},
+    scratching: false,
   });
   return {
     decks: { A: deck('A'), B: deck('B') },

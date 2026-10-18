@@ -101,9 +101,10 @@ export interface HoloObject {
   /** While a hand is setting the volume of a locked stem: the volume it's asking for. */
   volumeAdjust: number | null;
   /**
-   * Drawn as a standing bar (like the decks screen's stem faders): `halfSize`
-   * is then narrow in x and tall in y, the waveform runs bottom to top, the
-   * filter cap sits above and the loop cap below.
+   * A fader bar standing on the bottom of the screen (like the decks screen's
+   * stem faders): `halfSize` is its full track (narrow x, tall y), the bar
+   * fills from the bottom to the volume, and the waveform runs bottom to top
+   * inside the fill. The only interaction is pulling it up/down (volume).
    */
   vertical: boolean;
 }
@@ -135,6 +136,7 @@ export function capCenter(obj: HoloObject, kind: StemControl): { dx: number; dy:
 
 /** Which caps an object has: clips always loop, so they only get a filter cap. */
 export function hasCap(obj: HoloObject, kind: StemControl): boolean {
+  if (obj.vertical) return false; // fader bars: volume only for now
   return kind === 'filter' || obj.clipOf === null;
 }
 
@@ -153,12 +155,11 @@ export function effectiveHalfWidth(obj: HoloObject): number {
 
 /** A locked stem grows this much taller (× its height) at full stretch (less for already-tall bars). */
 export const LOCKED_STRETCH_GROW = 1;
-const VERTICAL_STRETCH_GROW = 0.35;
 
 /** Half height including a locked stem's vertical stretch, view-height units. */
 export function effectiveHalfHeight(obj: HoloObject): number {
-  if (!obj.locked) return obj.halfSize.y;
-  return obj.halfSize.y * (1 + (obj.vertical ? VERTICAL_STRETCH_GROW : LOCKED_STRETCH_GROW) * obj.stretchAmount);
+  if (!obj.locked || obj.vertical) return obj.halfSize.y; // fader bars have a fixed track
+  return obj.halfSize.y * (1 + LOCKED_STRETCH_GROW * obj.stretchAmount);
 }
 
 /**
@@ -219,4 +220,49 @@ export function stemView(s: Readonly<StemState>): StemView {
     loop: s.loop ? { ...s.loop } : null,
     ducked: s.ducked,
   };
+}
+
+/** A deck's record: an open palm on it scratches that deck. */
+export interface Platter {
+  deck: 'A' | 'B';
+  /** View space. */
+  position: Point2;
+  /** View-height units. */
+  radius: number;
+  color: string;
+  /** 0..1 an open palm is over it (arming). */
+  hover: number;
+  /** Hand scratching it, if any. */
+  hand: HandId | null;
+  /** Current scratch offset (s) while held, for visuals. */
+  offsetSec: number;
+}
+
+/** A deck's tempo strip (next to its record): pinch and drag up/down. */
+export interface TempoStrip {
+  deck: 'A' | 'B';
+  /** Center, view space. */
+  position: Point2;
+  /** Half length, view-height units. */
+  halfHeight: number;
+  color: string;
+  /** 0..1 a pinch-ready hand is near it. */
+  hover: number;
+  /** Hand holding it, if any. */
+  hand: HandId | null;
+  /** Rate being set while held (for visuals). */
+  value: number | null;
+}
+
+/** The open-palm crossfader zone (between the two decks' bars). */
+export interface CrossfadeZone {
+  /** View-space rectangle. */
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  /** 0..1 how far an open palm has armed it (held still). */
+  arming: number;
+  /** Hand holding the crossfader, if any. */
+  hand: HandId | null;
 }

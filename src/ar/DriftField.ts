@@ -60,6 +60,11 @@ export class DriftField {
     const damping = 2 * Math.sqrt(stiffness) * dampingRatio;
 
     for (const obj of objects) {
+      // Fader bars stay still: hands near them never push them around.
+      if (obj.locked) {
+        obj.drift = { x: 0, y: 0 };
+        continue;
+      }
       const v = this.velocity.get(obj.id) ?? { x: 0, y: 0 };
       // Current drift in height units.
       const d = { x: obj.drift.x * this.aspect, y: obj.drift.y };

@@ -29,7 +29,7 @@
       #hint[hidden] { display: none; }
       #hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 3;
               pointer-events: none; font: 10px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .2em;
-              color: rgba(190, 220, 255, .6); white-space: nowrap; text-align: center; line-height: 1.9; }
+              color: rgba(190, 220, 255, .6); white-space: normal; width: max-content; max-width: 92%; text-align: center; line-height: 1.9; }
       #status { position: absolute; top: 12px; right: 16px; z-index: 3; pointer-events: none;
                 font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; white-space: pre;
                 color: rgba(200, 230, 255, .8); text-shadow: 0 0 8px rgba(80, 180, 255, .5); }
@@ -55,8 +55,8 @@
       <div id="status"></div>
       <div id="search" hidden></div>
       <div id="hint">/ SEARCH SONGS (ENTER = DECK A · SHIFT+ENTER = DECK B) · SPACE PLAY · A/B DECK · ←/→ CROSSFADE<br>
-        FIST + UP/DOWN = VOLUME · TAP = MUTE · TWIST = FILTER · TWO FISTS ON ONE, PULL APART UP/DOWN = ECHO · ONE PER HAND = PULL APART TO ISOLATE<br>
-        ◯ LEFT CAP = LOOP (RAISE = LONGER, DRAG OUT = FLOATING CLIP) · FINGERTIPS DOWN = LIFT TO BUILD, LET GO TO DROP</div>
+        PINCH THE TOP OF A BAR = VOLUME ↕ · PINCH A TEMPO STRIP = TEMPO ↕ (TAP = ×1.00) · 1–2 FINGERS UP + SLIDE = CROSSFADE ◀▶<br>
+        OPEN PALM ANYWHERE, ROCK IT BACK AND FORTH = SCRATCH THAT SIDE'S DECK · FINGERTIPS DOWN = LIFT TO BUILD, LET GO TO DROP</div>
       <button id="start" hidden>▶ START SESSION</button>
       <div id="hud" class="hidden">Starting camera…</div>
     </div>

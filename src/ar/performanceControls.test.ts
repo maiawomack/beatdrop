@@ -434,13 +434,12 @@ describe('loop clips: pull a phrase out of a stem', () => {
     expect(rig.commands('removeClip')).toHaveLength(1);
   });
 
-  it('a tap on a clip mutes just the clip; clips have no loop cap', () => {
+  it('a tap on a clip does not mute it; clips have no loop cap', () => {
     pullOut();
     const clip = rig.controller.objects.find((o) => o.id === 'vocals~1')!;
     for (let i = 0; i < 4; i++) rig.frame();
     rig.pinchDrag('Right', [{ ...clip.position }]);
-    expect(rig.engine.stems.get('vocals~1')!.muted).toBe(true);
-    expect(rig.engine.stems.get('vocals')!.muted).toBe(false);
+    expect(rig.engine.stems.get('vocals~1')!.muted).toBe(false);
     // Grabbing where a loop cap would be just grabs the clip body (or nothing), never a loop.
     rig.pinchDrag('Right', [capPoint(clip, 'loop')]);
     expect(rig.commands('setLoop')).toHaveLength(0);

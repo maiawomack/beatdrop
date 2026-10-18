@@ -99,7 +99,17 @@ export type AudioCommand =
    */
   | { type: 'SET_BUILD'; value: number }
   /** Release the build on the next bar of the leading deck (immediately without a BPM). */
-  | { type: 'DROP' };
+  | { type: 'DROP' }
+  /**
+   * Scratch like a hand on the record. START: the deck's sound stops (it keeps
+   * running silently underneath, "slip" style). MOVE: play toward `offsetSec`
+   * from where the scratch started, forwards or backwards, at the hand's speed
+   * (holding still is silent). END: lift off; playback carries on exactly
+   * where it would have been, so it stays in time.
+   */
+  | { type: 'SCRATCH_START'; deck: DeckId }
+  | { type: 'SCRATCH_MOVE'; deck: DeckId; offsetSec: number }
+  | { type: 'SCRATCH_END'; deck: DeckId };
 
 // ---------------------------------------------------------------------------
 // State — published by the engine owner; read-only for everyone else.
@@ -172,6 +182,8 @@ export interface DeckState {
   channelFilter: Partial<Record<ChannelKey, number>>;
   /** Loop clips by id. */
   clips: Record<string, ClipState>;
+  /** A hand is on the record (SCRATCH_START .. SCRATCH_END). */
+  scratching: boolean;
 }
 
 export interface MixerState {

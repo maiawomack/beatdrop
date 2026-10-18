@@ -76,6 +76,37 @@ export interface HandState {
    */
   lift?: GestureState;
   /**
+   * Open palm: fingers extended and spread (the opposite of a fist). Used to
+   * hold the crossfader and to scratch a record. Point is the palm center.
+   * Optional so older recordings still load.
+   */
+  palm?: GestureState;
+  /**
+   * Fingers up (☝ or ✌): index extended and pointing up (middle either way),
+   * ring and pinky curled. Holds the crossfader. Point is the index tip.
+   * Optional so older recordings still load.
+   */
+  twoUp?: GestureState;
+  /**
+   * The hand is lying flat, palm down (like resting on a turntable), measured
+   * from the 3D palm normal with hysteresis. Optional so older recordings load.
+   */
+  flat?: boolean;
+  /**
+   * The palm faces the camera (3D palm normal pointing at the lens, fingers
+   * not hanging down), with hysteresis. Optional so older recordings load.
+   */
+  facing?: boolean;
+  /** Fingers hanging down the image (wrist above the knuckles), e.g. the lift pose. */
+  fingersDown?: boolean;
+  /** Raw facing amount, 0 (side-on / flat) .. 1 (palm straight at the camera), for tuning. */
+  facingAmount?: number;
+  /**
+   * Apparent palm size in the image (view-height units, smoothed). Grows as
+   * the hand moves toward the camera, so it tracks back-and-forth depth.
+   */
+  scale?: number;
+  /**
    * Smoothed in-plane hand rotation, radians, view space (y down, so
    * increasing = clockwise as the user sees it): angle of wrist -> middle
    * knuckle. Robust in a fist. Optional so older recordings still load.

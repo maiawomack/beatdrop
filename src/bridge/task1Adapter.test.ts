@@ -27,6 +27,7 @@ function deck(id: DeckId, over: Partial<DeckState> = {}): DeckState {
     bpmSource: null,
     channelFilter: {},
     clips: {},
+    scratching: false,
     ...over,
   };
 }

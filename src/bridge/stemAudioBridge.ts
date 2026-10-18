@@ -8,7 +8,7 @@ const EPSILON = 0.005;
  * Gives spatial interactions their musical meaning:
  *   move / reposition    -> nothing (layout only)
  *   level handle drag    -> setVolume
- *   tap on body          -> setMute toggle
+ *   tap on body          -> nothing (mute removed for now)
  *   two-hand stretch     -> setFx (filter sweep + echo), persists after release
  *   grab / release       -> grab / release (engine plays a feedback click)
  *   two-stem blend pair  -> setVolume on the other stems (ducked by isolation;
@@ -19,6 +19,9 @@ const EPSILON = 0.005;
  *   twist while holding  -> setFilter (same as the filter cap)
  *   filter cap           -> setFilter while moving; held on release
  *   build core           -> setBuild while raising, drop on slam, setBuild(0) on cancel
+ *   palm on a record     -> scratch start / move / end
+ *   fingers up + slide   -> setCrossfader
+ *   pinch a tempo strip  -> setTempo (tap = back to ×1.00)
  * Performance effects run on separate engine nodes, so they never change the
  * fader / mute / solo values the DJ set.
  * Object ids are used as stem ids. Current audio values are read from the
@@ -49,6 +52,24 @@ export function createStemAudioBridge(sink: AudioCommandSink): (e: InteractionEv
         if (e.build !== sentBuild) sink.dispatch({ type: 'setBuild', value: e.build });
         sink.dispatch({ type: 'drop' });
         sentBuild = 0;
+        return;
+      case 'scratchStart':
+        sink.dispatch({ type: 'scratch', deck: e.deck, phase: 'start', offsetSec: 0 });
+        return;
+      case 'scratch':
+        sink.dispatch({ type: 'scratch', deck: e.deck, phase: 'move', offsetSec: e.offsetSec });
+        return;
+      case 'scratchEnd':
+        sink.dispatch({ type: 'scratch', deck: e.deck, phase: 'end', offsetSec: 0 });
+        return;
+      case 'crossfadeStart':
+      case 'crossfadeEnd':
+        return;
+      case 'crossfade':
+        sink.dispatch({ type: 'setCrossfader', value: e.value });
+        return;
+      case 'tempo':
+        sink.dispatch({ type: 'setTempo', deck: e.deck, rate: e.rate });
         return;
       case 'buildEnd':
         if (!e.dropped && sentBuild > 0) sink.dispatch({ type: 'setBuild', value: 0 });
@@ -90,8 +111,7 @@ export function createStemAudioBridge(sink: AudioCommandSink): (e: InteractionEv
         sentVolume.delete(stemId);
         break;
       case 'tap':
-        sink.dispatch({ type: 'setMute', stemId, value: !object.audio.muted });
-        break;
+        break; // no tap-to-mute (removed for now)
       case 'level': {
         const prev = sentVolume.get(stemId);
         const atEdge = (e.value === 0 || e.value === 1) && prev !== e.value;

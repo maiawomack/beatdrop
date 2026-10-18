@@ -74,7 +74,17 @@ export type PerformanceCommand =
    * boundary (or immediately when the tempo is unknown), restores the
    * master bus, and plays an impact. No-op if there's no build.
    */
-  | { type: 'drop' };
+  | { type: 'drop' }
+  /** Crossfader, -1 (only deck A) .. 0 (both) .. 1 (only deck B). */
+  | { type: 'setCrossfader'; value: number }
+  /**
+   * Hand on a deck's record: `start` stops the sound (the song keeps running
+   * underneath), `move` plays toward `offsetSec` from where it started
+   * (negative = backwards), `end` lets go and playback carries on in time.
+   */
+  | { type: 'scratch'; deck: 'A' | 'B'; phase: 'start' | 'move' | 'end'; offsetSec: number }
+  /** Deck tempo (playback rate, turntable-style: pitch follows), 1 = normal. */
+  | { type: 'setTempo'; deck: 'A' | 'B'; rate: number };
 
 export type AudioCommand = StemCommand | PerformanceCommand;
 
@@ -131,6 +141,12 @@ export interface PerformanceState {
   dropQuantized: boolean;
   /** Increments on every drop, so listeners can detect a new one. */
   drops: number;
+  /** Crossfader, -1 (A) .. 1 (B). */
+  crossfader: number;
+  /** Decks with a hand on the record right now. */
+  scratching: ('A' | 'B')[];
+  /** Each deck's tempo (playback rate), 1 = normal. */
+  tempo: { A: number; B: number };
 }
 
 /** Playback clock, so every window can compute beat position itself. */
@@ -173,7 +189,7 @@ export function defaultStemState(): StemState {
 }
 
 export function defaultPerformanceState(): PerformanceState {
-  return { build: 0, dropPending: false, dropAtMs: null, dropQuantized: false, drops: 0 };
+  return { build: 0, dropPending: false, dropAtMs: null, dropQuantized: false, drops: 0, crossfader: 0, scratching: [], tempo: { A: 1, B: 1 } };
 }
 
 /** Wall-clock ms comparable across windows. */

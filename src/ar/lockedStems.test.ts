@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { HandId, Point2 } from '../perception';
-import { LEVEL_DEADZONE, LEVEL_TRAVEL, VOLUME_MAX_RATE } from './InteractionController';
-import { FRAME_MS, hand, Rig } from './testRig';
+import type { GesturePhase, HandId, Point2 } from '../perception';
+import { LEVEL_DEADZONE, LEVEL_TRAVEL, PINCH_ARM_MS, TWO_UP_ARM_MS, VOLUME_MAX_RATE } from './InteractionController';
+import { FRAME_MS, gesture, hand, Rig } from './testRig';
 
 /** Deck stems are locked in their column: grab + up/down = volume, two hands apart vertically = taller (FX). */
 describe('locked deck stems', () => {
@@ -58,9 +58,9 @@ describe('locked deck stems', () => {
     expect(Math.max(...vols)).toBeLessThanOrEqual(0.5 + VOLUME_MAX_RATE * (FRAME_MS / 1000) + 1e-9);
   });
 
-  it('a quick tap still mutes', () => {
+  it('a quick tap does not mute', () => {
     rig.pinchDrag('Right', [{ ...rig.stem('drums').position }]);
-    expect(rig.engine.stems.get('drums')!.muted).toBe(true);
+    expect(rig.engine.stems.get('drums')!.muted).toBe(false);
   });
 
   it('two hands pulled apart vertically stretch it taller (FX); horizontally they do not', () => {
@@ -95,5 +95,105 @@ describe('locked deck stems', () => {
     rig.frame(hand('Left', a, 'end'), hand('Right', low, 'held'));
     for (let i = 0; i < 6; i++) rig.frame(hand('Right', low, 'held'));
     expect(rig.engine.stems.get('drums')!.volume).toBe(1);
+  });
+});
+
+/** Deck stems as fader bars on the bottom edge: pinch near the top of the fill and drag up/down. */
+describe('fader bars', () => {
+  let rig: Rig;
+  const TRACK = 0.56; // full track height = full volume range
+  beforeEach(() => {
+    rig = new Rig();
+    rig.stems.forEach((s, i) => {
+      s.locked = true;
+      s.vertical = true;
+      s.halfSize = { x: 0.05, y: TRACK / 2 };
+      s.position = { x: 0.1 + i * 0.08, y: 1 - 0.035 - TRACK / 2 };
+    });
+    rig.controller.crossfadeZone = { x0: 0.36, x1: 0.64, y0: 0.35, y1: 1, arming: 0, hand: null };
+  });
+
+  const pinch = (id: HandId, p: Point2, phase: GesturePhase = 'held', fist = false) => ({
+    ...hand(id, p, fist ? phase : 'idle'),
+    pinch: gesture(phase, p),
+    grip: gesture(fist ? 'held' : 'idle', p),
+  });
+  /** Top of a bar's fill (view space). */
+  const topOf = (id: string) => {
+    const o = rig.stem(id);
+    return { x: o.position.x, y: o.position.y + o.halfSize.y - 2 * o.halfSize.y * o.audio.volume };
+  };
+  const pinchAt = (id: HandId, p: Point2) => {
+    rig.frame(pinch(id, p, 'start'));
+    for (let t = 0; t <= PINCH_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(pinch(id, p));
+  };
+  const drag = (id: HandId, from: Point2, to: Point2, n: number) => {
+    for (let i = 1; i <= n; i++) rig.frame(pinch(id, { x: from.x + (to.x - from.x) * (i / n), y: from.y + (to.y - from.y) * (i / n) }));
+    for (let i = 0; i < 10; i++) rig.frame(pinch(id, to));
+  };
+
+  it('pinch near the top of the bar and drag: the top follows the hand 1:1', () => {
+    rig.engine.dispatch({ type: 'setVolume', stemId: 'drums', value: 0.5 });
+    rig.frame();
+    const drums = rig.stem('drums');
+    const home = { ...drums.position };
+    // Not exactly on the line: a bit above it is fine.
+    const p = { x: topOf('drums').x, y: topOf('drums').y - 0.05 };
+    pinchAt('Right', p);
+    expect(drums.holders).toEqual(['Right']);
+    expect(rig.controller.handModes.get('Right')).toBe('volume');
+    const up = { x: p.x, y: p.y - TRACK * 0.25 - 0.01 };
+    drag('Right', p, up, 15);
+    expect(rig.engine.stems.get('drums')!.volume).toBeCloseTo(0.75, 2);
+    rig.frame(pinch('Right', up, 'end'));
+    expect(drums.holders).toHaveLength(0);
+    expect(drums.position).toEqual(home);
+  });
+
+  it('a pinch deep inside the bar (far below its top) does not grab it', () => {
+    rig.frame();
+    const v = rig.stem('vocals'); // full volume: top of the fill is the top of the track
+    pinchAt('Left', { x: v.position.x, y: v.position.y + 0.15 });
+    expect(v.holders).toHaveLength(0);
+  });
+
+  it('an empty bar can be pinched at the bottom, where its top is', () => {
+    rig.engine.dispatch({ type: 'setVolume', stemId: 'vocals', value: 0 });
+    rig.frame();
+    pinchAt('Left', { ...topOf('vocals'), y: topOf('vocals').y - 0.03 });
+    expect(rig.stem('vocals').holders).toEqual(['Left']);
+  });
+
+  it('a fist on a bar does nothing', () => {
+    rig.pinchDrag('Right', [{ ...rig.stem('drums').position }, { x: rig.stem('drums').position.x, y: 0.5 }]);
+    expect(rig.stem('drums').holders).toHaveLength(0);
+    expect(rig.commands('setVolume')).toHaveLength(0);
+    expect(rig.engine.stems.get('drums')!.muted).toBe(false);
+  });
+
+  it('the crossfader (two fingers up) keeps going when the hand slides over the bars', () => {
+    const p = { x: 0.5, y: 0.6 };
+    const v = (q: Point2, phase: GesturePhase = 'held') => ({ ...hand('Right', q, 'idle'), twoUp: gesture(phase, q) });
+    rig.frame(v(p, 'start'));
+    for (let t = 0; t <= TWO_UP_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(v(p));
+    expect(rig.controller.handModes.get('Right')).toBe('crossfading');
+    const to = { x: rig.stem('drums').position.x, y: p.y };
+    for (let i = 1; i <= 20; i++) rig.frame(v({ x: p.x + (to.x - p.x) * (i / 20), y: p.y }));
+    for (let i = 0; i < 10; i++) rig.frame(v(to));
+    expect(rig.controller.handModes.get('Right')).toBe('crossfading');
+    expect(rig.engine.perf.crossfader).toBeLessThan(-0.5);
+    expect(rig.stem('drums').holders).toHaveLength(0);
+  });
+
+  it('a pinch on a record scratches it', () => {
+    rig.controller.platters = [{ deck: 'A', position: { x: 0.2, y: 0.2 }, radius: 0.08, color: '#fff', hover: 0, hand: null, offsetSec: 0 }];
+    pinchAt('Right', { x: 0.2, y: 0.2 });
+    expect(rig.controller.handModes.get('Right')).toBe('scratching');
+    rig.frame(pinch('Right', { x: 0.2 + 0.05, y: 0.2 }));
+    const last = rig.commands('scratch').at(-1) as { phase: string; offsetSec: number };
+    expect(last.phase).toBe('move');
+    expect(last.offsetSec).toBeGreaterThan(0);
+    rig.frame(pinch('Right', { x: 0.25, y: 0.2 }, 'end'));
+    expect((rig.commands('scratch').at(-1) as { phase: string }).phase).toBe('end');
   });
 });

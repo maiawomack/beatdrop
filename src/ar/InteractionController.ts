@@ -11,8 +11,11 @@ import {
   LEVEL_HANDLE_ENABLED,
   levelHandle,
   STRETCH_GESTURE_SPAN,
+  type CrossfadeZone,
   type HoloObject,
+  type Platter,
   type StemControl,
+  type TempoStrip,
 } from './HoloObject';
 
 /**
@@ -28,8 +31,49 @@ const HANDLE_HIT = { halfWidth: 0.04, pad: 0.03 };
 export const LEVEL_TRAVEL = 0.4;
 /** Hand jitter (view-height units) ignored before the fader starts moving. */
 export const LEVEL_DEADZONE = 0.02;
+// --- Open-palm controls -------------------------------------------------------
+/** An open palm facing the camera must be held this long before it takes a record (ms), so passing hands don't scratch. */
+export const SCRATCH_ARM_MS = 200;
+/** Extra reach around a record for the palm or pinch (view-height units). */
+const PLATTER_PAD = 0.06;
+/** A pinch this close to a fader bar's fill line (above / below, view-height units) grabs it. */
+export const FADER_GRAB_ABOVE = 0.1;
+export const FADER_GRAB_BELOW = 0.12;
+const FADER_GRAB_PAD_X = 0.03;
+/** Moving the palm this far off the record lets go (× radius). */
+const PLATTER_LEAVE = 2.2;
+/**
+ * Scratching follows how far the hand turns the record around its center,
+ * like a real deck: one full turn = one revolution at 33⅓ rpm (1.8 s of audio),
+ * clockwise (as you see it) = forward.
+ */
+export const RECORD_TURNS_PER_SEC = 33.333 / 60;
+/**
+ * Away from a record, the hand turns an invisible record whose center is this
+ * far below where the hand started (view-height units), so an arc back and
+ * forth over its top edge (or plain side-to-side) scratches.
+ */
+export const SCRATCH_VIRTUAL_RADIUS = 0.15;
+/** Seconds of audio per view-height of sideways movement at the top of the invisible record (small moves). */
+export const SCRATCH_SEC_PER_UNIT = 1 / (SCRATCH_VIRTUAL_RADIUS * 2 * Math.PI * RECORD_TURNS_PER_SEC);
+/** Tempo strip: pinch within this reach (view-height units) of it; dragging TEMPO_TRAVEL changes the tempo by TEMPO_RANGE. */
+const TEMPO_REACH = { x: 0.045, y: 0.03 };
+export const TEMPO_TRAVEL = 0.3;
+export const TEMPO_RANGE = 0.16;
+/** Tempo within this of normal snaps to exactly ×1.00. */
+const TEMPO_DETENT = 0.005;
+/** A pinch held this long (without closing into a fist) takes what's under it. */
+export const PINCH_ARM_MS = 150;
+/** Two fingers up held this long takes the crossfader. */
+export const TWO_UP_ARM_MS = 120;
+/** Sideways palm travel (view-height units) that sweeps the crossfader from A all the way to B. */
+export const FADE_TRAVEL = 0.5;
+const FADE_MAX_RATE = 4;
+
 /** Max volume change per second on a locked stem, so a tracking glitch can't jump the level. */
 export const VOLUME_MAX_RATE = 3;
+/** Fader bars: smaller dead zone, since the bar's top tracks the hand 1:1. */
+export const BAR_DEADZONE = 0.01;
 /** A targeted object stays targeted until the hand is this far outside its hitbox (hover hysteresis). */
 const TARGET_EXIT = 0.05;
 /** A second hand may join a held stem (to stretch it) from this much further out. */
@@ -131,6 +175,10 @@ export type HandMode =
   | 'loopSelecting'
   | 'filterControl'
   | 'volume'
+  | 'scratching'
+  | 'scratchArming'
+  | 'tempo'
+  | 'crossfading'
   | 'clipPulling'
   | 'buildArmed'
   | 'building'
@@ -194,7 +242,17 @@ export type InteractionEvent =
   /** Loop cap dragged out and released: pull a `beats` clip out of `object` as `clipId`, landing `at`. */
   | { type: 'clipCreate'; object: HoloObject; hand: HandId; clipId: string; beats: LoopBeats; at: Point2 }
   /** A clip was dropped or thrown back into its source stem. */
-  | { type: 'clipReturn'; object: HoloObject; source: HoloObject };
+  | { type: 'clipReturn'; object: HoloObject; source: HoloObject }
+  /** Open palm on a deck's record. `offsetSec` = how far the record has been moved (negative = back). */
+  | { type: 'scratchStart'; deck: 'A' | 'B'; hand: HandId }
+  | { type: 'scratch'; deck: 'A' | 'B'; hand: HandId; offsetSec: number }
+  | { type: 'scratchEnd'; deck: 'A' | 'B'; hand: HandId }
+  /** Open palm holding the crossfader. `value` -1 (A) .. 1 (B). */
+  | { type: 'crossfadeStart'; hand: HandId }
+  | { type: 'crossfade'; hand: HandId; value: number }
+  | { type: 'crossfadeEnd'; hand: HandId }
+  /** Pinched tempo strip: the deck's playback rate (1 = normal). */
+  | { type: 'tempo'; deck: 'A' | 'B'; hand: HandId; rate: number };
 
 interface Sample {
   t: number;
@@ -253,7 +311,50 @@ interface BuildGrab {
   history: Sample[];
 }
 
-type Grab = BodyGrab | LevelGrab | CapGrab | BuildGrab;
+interface ScratchGrab {
+  kind: 'scratch';
+  platter: Platter;
+  startX: number;
+  /** Which hand shape holds the record (it lets go when that shape ends). */
+  via: 'palm' | 'pinch';
+  /** Center the hand turns the record around (view space). */
+  center: Point2;
+  /** Hand angle around the center last frame, and the total turned since the start (radians). */
+  lastAngle: number;
+  turned: number;
+  /** Hand tilt last frame (wrist rocking, like a windshield wiper), if known. */
+  lastRoll: number | null;
+}
+
+/** Pinch on a fader bar's top: drag up/down for volume. */
+interface FaderGrab {
+  kind: 'fader';
+  object: HoloObject;
+  startY: number;
+  startVolume: number;
+  value: number;
+  active: boolean;
+}
+
+interface FadeGrab {
+  kind: 'crossfade';
+  startX: number;
+  start: number;
+  value: number;
+}
+
+/** Pinch on a deck's tempo strip: drag up/down for faster/slower. */
+interface TempoGrab {
+  kind: 'tempo';
+  strip: TempoStrip;
+  startT: number;
+  startY: number;
+  start: number;
+  value: number;
+  maxTravel: number;
+}
+
+type Grab = BodyGrab | LevelGrab | CapGrab | BuildGrab | ScratchGrab | FadeGrab | FaderGrab | TempoGrab;
 
 /**
  * Consumes perception frames and turns them into spatial interactions.
@@ -303,7 +404,23 @@ export class InteractionController {
   /** Set false to disable the lift build gesture. */
   buildEnabled = true;
   /** Mirror of engine performance state (set each frame, like each stem's `audio`). */
-  perfView = { dropPending: false };
+  perfView = { dropPending: false, crossfader: 0, tempo: { A: 1, B: 1 } };
+  /** Decks' tempo strips (set by the page as decks load). */
+  tempoStrips: TempoStrip[] = [];
+  /** Decks' records (set by the page as decks load). */
+  platters: Platter[] = [];
+  /** Open-palm crossfader zone, or null to disable. */
+  crossfadeZone: CrossfadeZone | null = null;
+  /** Live crossfader value while a palm holds it (for visuals). */
+  crossfadeValue: number | null = null;
+  /** Per hand: since when an open palm has been arming a record or the crossfader. */
+  private palmArm = new Map<HandId, { kind: 'scratch'; since: number; platter?: Platter }>();
+  /** Per hand: since when a pinch has been arming the crossfader. */
+  private pinchArm = new Map<HandId, number>();
+  /** Per hand: since when two fingers up have been arming the crossfader. */
+  private twoUpArm = new Map<HandId, number>();
+  /** Per hand: current pinch point (pinched faders and records follow it). */
+  private pinchPoints = new Map<HandId, Point2>();
   /** Live build gesture, or null. */
   build: BuildView | null = null;
   /** Current state of each hand in the frame. */
@@ -353,7 +470,19 @@ export class InteractionController {
     for (const hand of frame.hands) {
       // A build is held by the lift pose; everything else by the grab gesture.
       const g = this.grabs.get(hand.id);
-      const ended = g?.kind === 'build' ? !hand.lift?.active : hand[this.gesture].phase === 'end';
+      const ended =
+        g?.kind === 'build'
+          ? !hand.lift?.active
+          : g?.kind === 'scratch'
+            ? g.via === 'palm'
+              ? !hand.palm?.active
+              : !hand.pinch.active
+            : g?.kind === 'fader' || g?.kind === 'tempo'
+              ? // Once a pinch has a target it keeps it until the pinch opens (curling fingers doesn't drop it).
+                !hand.pinch.active
+              : g?.kind === 'crossfade'
+                ? !hand.twoUp?.active
+                : hand[this.gesture].phase === 'end';
       if (ended) this.release(hand.id, points, t, !hand.tracked);
     }
     // Safety net: release hands that vanished without an 'end'.
@@ -365,6 +494,25 @@ export class InteractionController {
 
     for (const hand of frame.hands) {
       const phase = hand[this.gesture].phase;
+      this.pinchPoints.set(hand.id, { ...hand.pinch.point });
+      // Two fingers up (✌) takes the crossfader.
+      if (hand.twoUp?.active && !hand.lift?.active) {
+        this.armTwoUp(hand, t);
+        this.pinchArm.delete(hand.id);
+        this.gestureStart.delete(hand.id);
+        continue;
+      }
+      this.twoUpArm.delete(hand.id);
+      // A pinch that isn't closing into a fist arms the crossfader.
+      if (hand.pinch.active && !hand.grip.active && !hand.lift?.active && !hand.palm?.active) this.armPinch(hand, t);
+      else this.pinchArm.delete(hand.id);
+      // An open palm (fingers not hanging down) scratches the deck on its side of the screen; never stems.
+      if (hand.palm?.active && !hand.fingersDown && !hand.lift?.active) {
+        this.armPalm(hand, t);
+        this.gestureStart.delete(hand.id);
+        continue;
+      }
+      this.palmArm.delete(hand.id);
       // The lift pose starts a build (one at a time), and never grabs stems.
       if (hand.lift?.active) {
         if (this.buildEnabled && hand.tracked && !this.grabs.has(hand.id) && !this.build) this.startBuild(hand.id, t);
@@ -390,11 +538,15 @@ export class InteractionController {
       if (g.kind === 'loop') this.adjustLoop(hand, g);
       if (g.kind === 'filter') this.adjustFilter(hand, g, dt);
       if (g.kind === 'build') this.adjustBuild(hand, g, t, dt);
+      if (g.kind === 'scratch') this.adjustScratch(hand, g, points, state.roll);
+      if (g.kind === 'crossfade') this.adjustFade(hand, g, dt);
+      if (g.kind === 'fader') this.adjustFader(hand, g, dt);
+      if (g.kind === 'tempo') this.adjustTempo(hand, g);
     }
     for (const obj of this.objects) {
       obj.twist = null;
-      obj.volumeAdjust = null;
-      if (obj.holders.length === 0) continue;
+      if (!obj.vertical || obj.holders.length === 0) obj.volumeAdjust = null; // a pinched fader sets its own
+      if (obj.holders.length === 0 || obj.vertical) continue; // fader bars are driven by their pinch grab
       this.follow(obj, points, dt);
       record(this.positionHistory, obj.id, t, obj.position);
       this.onEvent({ type: 'move', object: obj });
@@ -410,9 +562,257 @@ export class InteractionController {
     this.stepReset(dt);
     this.stepPhysics(dt);
     this.updateHover(frame);
+    this.updatePalmHover(t);
     this.updateModes(frame);
     for (const id of [...this.aimHistory.keys()]) if (!points.has(id)) this.aimHistory.delete(id);
     for (const id of [...this.gestureStart.keys()]) if (!points.has(id)) this.gestureStart.delete(id);
+    for (const id of [...this.palmArm.keys()]) if (!points.has(id)) this.palmArm.delete(id);
+    for (const id of [...this.pinchArm.keys()]) if (!points.has(id)) this.pinchArm.delete(id);
+    for (const id of [...this.twoUpArm.keys()]) if (!points.has(id)) this.twoUpArm.delete(id);
+    for (const id of [...this.pinchPoints.keys()]) if (!points.has(id)) this.pinchPoints.delete(id);
+  }
+
+  // --- Open-palm controls: records and crossfader -----------------------------
+
+  /** An open palm: arm (and then take) the record under it, or the crossfader if held still in its zone. */
+  private armPalm(hand: HandState, t: number): void {
+    if (!hand.tracked || this.grabs.has(hand.id)) return;
+    const p = hand.palm!.point;
+    // On a record: that record. Anywhere else: the deck on that side of the screen.
+    const onRecord = this.platters.find((pl) => !pl.hand && viewDist(p, pl.position, this.aspect) <= pl.radius + PLATTER_PAD);
+    const platter = onRecord ?? this.platterForSide(p);
+    const kind = platter ? 'scratch' : null;
+    const arm = this.palmArm.get(hand.id);
+    if (!kind) {
+      this.palmArm.delete(hand.id);
+      return;
+    }
+    if (!arm || arm.kind !== kind || arm.platter !== platter) {
+      this.palmArm.set(hand.id, { kind, since: t, platter: platter ?? undefined });
+      return;
+    }
+    if (t - arm.since < SCRATCH_ARM_MS || !platter) return;
+    this.palmArm.delete(hand.id);
+    const anchor = this.dragPoints.get(hand.id) ?? p;
+    platter.hand = hand.id;
+    platter.offsetSec = 0;
+    this.grabs.set(hand.id, {
+      kind: 'scratch',
+      platter,
+      startX: anchor.x,
+      via: 'palm',
+      ...this.scratchCenter(anchor, onRecord),
+      lastRoll: hand.roll ?? null,
+    });
+    this.onEvent({ type: 'scratchStart', deck: platter.deck, hand: hand.id });
+  }
+
+  /**
+   * The pinch (thumb + index) is the grab for the deck controls. Once held a
+   * moment without closing into a fist, what it takes depends on where it is:
+   * a record -> scratch, the top of a fader bar -> volume (elsewhere: nothing).
+   * It keeps that target until the pinch opens.
+   */
+  private armPinch(hand: HandState, t: number): void {
+    if (!hand.tracked || this.grabs.has(hand.id)) return;
+    const since = this.pinchArm.get(hand.id);
+    if (since === undefined) {
+      this.pinchArm.set(hand.id, t);
+      return;
+    }
+    if (t - since < PINCH_ARM_MS) return;
+    this.pinchArm.delete(hand.id);
+    const p = hand.pinch.point;
+    const platter = this.platters.find((pl) => !pl.hand && viewDist(p, pl.position, this.aspect) <= pl.radius + PLATTER_PAD);
+    if (platter) {
+      platter.hand = hand.id;
+      platter.offsetSec = 0;
+      this.grabs.set(hand.id, { kind: 'scratch', platter, startX: p.x, via: 'pinch', ...this.scratchCenter(p, platter), lastRoll: null });
+      this.onEvent({ type: 'scratchStart', deck: platter.deck, hand: hand.id });
+      return;
+    }
+    const strip = this.tempoAt(p);
+    if (strip) {
+      const start = this.perfView.tempo[strip.deck];
+      strip.hand = hand.id;
+      strip.value = start;
+      this.grabs.set(hand.id, { kind: 'tempo', strip, startT: t, startY: p.y, start, value: start, maxTravel: 0 });
+      return;
+    }
+    const bar = this.faderAt(p);
+    if (bar) {
+      bar.holders = [hand.id];
+      bar.holdPoints = [{ ...p }];
+      this.grabs.set(hand.id, { kind: 'fader', object: bar, startY: p.y, startVolume: bar.audio.volume, value: bar.audio.volume, active: false });
+      this.onEvent({ type: 'levelStart', object: bar, hand: hand.id });
+      return;
+    }
+  }
+
+  /** Two fingers up, held a moment: take the crossfader (it follows the hand sideways). */
+  private armTwoUp(hand: HandState, t: number): void {
+    if (!hand.tracked || this.grabs.has(hand.id) || !this.crossfadeZone || this.crossfadeZone.hand) return;
+    const since = this.twoUpArm.get(hand.id);
+    if (since === undefined) {
+      this.twoUpArm.set(hand.id, t);
+      return;
+    }
+    if (t - since < TWO_UP_ARM_MS) return;
+    this.twoUpArm.delete(hand.id);
+    const p = this.dragPoints.get(hand.id) ?? hand.anchor;
+    this.crossfadeZone.hand = hand.id;
+    const start = this.perfView.crossfader;
+    this.crossfadeValue = start;
+    this.grabs.set(hand.id, { kind: 'crossfade', startX: p.x, start, value: start });
+    this.onEvent({ type: 'crossfadeStart', hand: hand.id });
+  }
+
+  /**
+   * What the hand turns: the record itself when the hand is on it (not right
+   * at its middle), otherwise an invisible record just below the hand.
+   */
+  private scratchCenter(p: Point2, record: Platter | undefined): { center: Point2; lastAngle: number; turned: number } {
+    const onRim = record && viewDist(p, record.position, this.aspect) > record.radius * 0.35;
+    const center = onRim ? { ...record!.position } : { x: p.x, y: p.y + SCRATCH_VIRTUAL_RADIUS };
+    return { center, lastAngle: this.angleAround(center, p), turned: 0 };
+  }
+
+  /** Angle of a point around a center: 0 = straight above it, increasing clockwise as you see it. */
+  private angleAround(c: Point2, p: Point2): number {
+    return Math.atan2((p.x - c.x) * this.aspect, c.y - p.y);
+  }
+
+  /** The record of the deck on this side of the screen (left = A, right = B), or the only one shown. */
+  private platterForSide(p: Point2): Platter | undefined {
+    const free = this.platters.filter((pl) => !pl.hand);
+    if (free.length <= 1) return free[0];
+    return free.find((pl) => pl.deck === (p.x < 0.5 ? 'A' : 'B'));
+  }
+
+  /** The tempo strip under (or near) this point, if free. */
+  private tempoAt(p: Point2): TempoStrip | undefined {
+    return this.tempoStrips.find(
+      (s) =>
+        !s.hand &&
+        Math.abs(p.x - s.position.x) * this.aspect <= TEMPO_REACH.x &&
+        Math.abs(p.y - s.position.y) <= s.halfHeight + TEMPO_REACH.y,
+    );
+  }
+
+  /** Pinched tempo strip: relative drag, up = faster, with a notch at ×1.00. */
+  private adjustTempo(hand: HandId, g: TempoGrab): void {
+    const p = this.pinchPoints.get(hand);
+    if (!p) return;
+    const dy = g.startY - p.y;
+    g.maxTravel = Math.max(g.maxTravel, Math.abs(dy));
+    let rate = Math.max(0.5, Math.min(2, g.start + (dy / TEMPO_TRAVEL) * TEMPO_RANGE));
+    if (Math.abs(rate - 1) < TEMPO_DETENT) rate = 1;
+    g.strip.value = rate;
+    if (Math.abs(rate - g.value) < 1e-4) return;
+    g.value = rate;
+    this.onEvent({ type: 'tempo', deck: g.strip.deck, hand, rate });
+  }
+
+  /** The fader bar whose fill line (the top of the bar) is near this point, if any. */
+  private faderAt(p: Point2): HoloObject | null {
+    let best: HoloObject | null = null;
+    let bestD = Infinity;
+    for (const o of this.objects) {
+      if (!o.vertical || o.holders.length > 0) continue;
+      const dx = Math.abs(p.x - o.position.x) * this.aspect;
+      if (dx > o.halfSize.x + FADER_GRAB_PAD_X) continue;
+      const top = o.position.y + o.halfSize.y - 2 * o.halfSize.y * o.audio.volume;
+      const dy = p.y - top; // negative = above the line
+      if (dy < -FADER_GRAB_ABOVE || dy > FADER_GRAB_BELOW) continue;
+      const d = Math.hypot(dx, dy);
+      if (d < bestD) {
+        best = o;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Pinched fader: the bar's top follows the pinch 1:1, rate-limited. */
+  private adjustFader(hand: HandId, g: FaderGrab, dt: number): void {
+    const p = this.pinchPoints.get(hand);
+    if (!p) return;
+    const obj = g.object;
+    obj.holdPoints = [{ ...p }];
+    const dy = g.startY - p.y;
+    const moved = Math.sign(dy) * Math.max(0, Math.abs(dy) - BAR_DEADZONE);
+    if (!g.active && moved === 0) {
+      obj.volumeAdjust = g.value;
+      return;
+    }
+    g.active = true;
+    const target = clamp01(g.startVolume + moved / (2 * obj.halfSize.y));
+    const value = stepToward(g.value, target, VOLUME_MAX_RATE * Math.max(dt, 1 / 60));
+    obj.volumeAdjust = value;
+    if (value === g.value) return;
+    g.value = value;
+    this.onEvent({ type: 'level', object: obj, hand, value });
+  }
+
+  /** Scratch: sideways movement of the hand moves the record (right = forward). */
+  private adjustScratch(hand: HandId, g: ScratchGrab, points: Map<HandId, Point2>, roll?: number): void {
+    const p = (g.via === 'pinch' ? this.pinchPoints.get(hand) : this.dragPoints.get(hand)) ?? points.get(hand)!;
+    // A pinched record lets go if the hand wanders well off it (an open palm scratches from anywhere).
+    if (g.via === 'pinch' && viewDist(p, g.platter.position, this.aspect) > g.platter.radius * PLATTER_LEAVE) {
+      this.release(hand, points, this.lastT ?? 0);
+      return;
+    }
+    // Turn the record by whichever arc the hand makes this frame (no double counting):
+    //  - the hand moving around the record's center (an arm arc), or
+    //  - the hand tilting at the wrist (rocking like a windshield wiper).
+    const angle = this.angleAround(g.center, p);
+    const arc = wrapAngle(angle - g.lastAngle);
+    g.lastAngle = angle;
+    let rock = 0;
+    if (roll !== undefined && g.lastRoll !== null) rock = wrapAngle(roll - g.lastRoll);
+    if (roll !== undefined) g.lastRoll = roll;
+    g.turned += Math.abs(rock) > Math.abs(arc) ? rock : arc;
+    const offsetSec = g.turned / (2 * Math.PI) / RECORD_TURNS_PER_SEC;
+    g.platter.offsetSec = offsetSec;
+    this.onEvent({ type: 'scratch', deck: g.platter.deck, hand, offsetSec });
+  }
+
+  /** Crossfader: follows the hand (knuckles) sideways, relative to where it took it, rate-limited. */
+  private adjustFade(hand: HandId, g: FadeGrab, dt: number): void {
+    const p = this.dragPoints.get(hand);
+    if (!p) return;
+    const target = Math.max(-1, Math.min(1, g.start + ((p.x - g.startX) * this.aspect * 2) / FADE_TRAVEL));
+    const value = stepToward(g.value, target, FADE_MAX_RATE * Math.max(dt, 1 / 60));
+    this.crossfadeValue = value;
+    if (value === g.value) return;
+    g.value = value;
+    this.onEvent({ type: 'crossfade', hand, value });
+  }
+
+  /** Arming feedback for the records and the crossfader zone. */
+  private updatePalmHover(t: number): void {
+    for (const pl of this.platters) pl.hover = pl.hand ? 1 : 0;
+    if (this.crossfadeZone) this.crossfadeZone.arming = this.crossfadeZone.hand ? 1 : 0;
+    for (const arm of this.palmArm.values()) {
+      if (arm.platter) arm.platter.hover = Math.max(arm.platter.hover, Math.min(1, 0.4 + (t - arm.since) / SCRATCH_ARM_MS));
+    }
+    // Bar tops and tempo strips light up under a hand that could pinch them.
+    for (const st of this.tempoStrips) st.hover = st.hand ? 1 : 0;
+    for (const [hand, p] of this.pinchPoints) {
+      if (this.grabs.has(hand)) continue;
+      const strip = this.tempoAt(p);
+      if (strip) {
+        strip.hover = 1;
+        continue;
+      }
+      const bar = this.faderAt(p);
+      if (bar) bar.hover = 1;
+    }
+    if (this.crossfadeZone) {
+      for (const since of this.twoUpArm.values()) {
+        this.crossfadeZone.arming = Math.max(this.crossfadeZone.arming, Math.min(1, (t - since) / TWO_UP_ARM_MS));
+      }
+    }
   }
 
   /** Derive each hand's state from what it holds / targets. */
@@ -423,8 +823,12 @@ export class InteractionController {
       let mode: HandMode;
       if (!hand.tracked) mode = 'trackingLost';
       else if (!g) {
-        const hovering = this.targets.has(hand.id) || this.objects.some((o) => o.capHover.loop > 0.99 || o.capHover.filter > 0.99);
-        mode = hovering ? 'hover' : 'idle';
+        const hovering =
+          this.targets.has(hand.id) ||
+          this.pinchArm.has(hand.id) ||
+          this.twoUpArm.has(hand.id) ||
+          this.objects.some((o) => o.capHover.loop > 0.99 || o.capHover.filter > 0.99);
+        mode = this.palmArm.has(hand.id) ? 'scratchArming' : hovering ? 'hover' : 'idle';
       } else if (g.kind === 'body') {
         if (g.twisting) mode = 'filterControl';
         else if (g.object.holders.length === 2) mode = 'stretching';
@@ -432,6 +836,10 @@ export class InteractionController {
         else if (this.blendPair?.includes(g.object)) mode = 'blending';
         else mode = g.maxTravel < TAP_MOVE ? 'grabbing' : 'repositioning';
       } else if (g.kind === 'loop') mode = g.pulled ? 'clipPulling' : 'loopSelecting';
+      else if (g.kind === 'scratch') mode = 'scratching';
+      else if (g.kind === 'crossfade') mode = 'crossfading';
+      else if (g.kind === 'fader') mode = 'volume';
+      else if (g.kind === 'tempo') mode = 'tempo';
       else if (g.kind === 'filter') mode = 'filterControl';
       else if (g.kind === 'build') {
         mode = g.dropped || this.perfView.dropPending ? 'dropPending' : g.value >= BUILD_MIN ? 'building' : 'buildArmed';
@@ -488,7 +896,7 @@ export class InteractionController {
 
     const sticky = this.targets.get(hand.id);
     const target =
-      (sticky && sticky.holders.length < 2 && !sticky.levelHand && !sticky.control ? sticky : null) ??
+      (sticky && canTake(sticky) && !sticky.levelHand && !sticky.control && !sticky.vertical ? sticky : null) ??
       this.pick(aim) ??
       this.pickStretchJoin(points.get(hand.id)!);
     if (!target) return;
@@ -542,6 +950,32 @@ export class InteractionController {
     if (!g) return;
     this.grabs.delete(hand);
 
+    if (g.kind === 'scratch') {
+      g.platter.hand = null;
+      g.platter.offsetSec = 0;
+      this.onEvent({ type: 'scratchEnd', deck: g.platter.deck, hand });
+      return;
+    }
+    if (g.kind === 'tempo') {
+      g.strip.hand = null;
+      g.strip.value = null;
+      // A quick pinch-tap without dragging resets to normal speed.
+      if (!lost && t - g.startT < TAP_MS + 150 && g.maxTravel < TAP_MOVE) this.onEvent({ type: 'tempo', deck: g.strip.deck, hand, rate: 1 });
+      return;
+    }
+    if (g.kind === 'fader') {
+      g.object.holders = [];
+      g.object.holdPoints = [];
+      g.object.volumeAdjust = null;
+      this.onEvent({ type: 'levelEnd', object: g.object, hand });
+      return;
+    }
+    if (g.kind === 'crossfade') {
+      if (this.crossfadeZone) this.crossfadeZone.hand = null;
+      this.crossfadeValue = null;
+      this.onEvent({ type: 'crossfadeEnd', hand });
+      return;
+    }
     if (g.kind === 'build') {
       // Opening the hand mid-slam still drops; losing the hand never does.
       const p = this.dragPoints.get(hand);
@@ -619,7 +1053,7 @@ export class InteractionController {
     this.positionHistory.delete(obj.id);
     this.onEvent({ type: 'release', object: obj, hand });
     if (g.twisting) this.onEvent({ type: 'filterEnd', object: obj, hand });
-    if (isTap) this.onEvent({ type: 'tap', object: obj, hand });
+    if (isTap && !obj.vertical) this.onEvent({ type: 'tap', object: obj, hand }); // fader bars: no tap-to-mute
     else this.maybeReturnClip(obj);
   }
 
@@ -701,7 +1135,7 @@ export class InteractionController {
    * maps further rotation to the filter, rate-limited against glitches.
    */
   private adjustTwist(hand: HandId, g: BodyGrab, roll: number | undefined, dt: number): void {
-    if (roll === undefined || g.rollStart === null || g.object.holders.length !== 1) return;
+    if (roll === undefined || g.rollStart === null || g.object.holders.length !== 1 || g.object.vertical) return;
     const d = wrapAngle(roll - g.rollStart);
     if (!g.twisting) {
       if (Math.abs(d) < TWIST_DEADZONE) return;
@@ -870,10 +1304,13 @@ export class InteractionController {
   private adjustVolume(hand: HandId, g: BodyGrab, p: Point2, dt: number): void {
     const obj = g.object;
     const dy = g.startHand.y - p.y; // up = louder
-    const moved = Math.sign(dy) * Math.max(0, Math.abs(dy) - LEVEL_DEADZONE);
+    // Fader bars: the bar's top follows the hand 1:1 (full track = full range).
+    const deadzone = obj.vertical ? BAR_DEADZONE : LEVEL_DEADZONE;
+    const travel = obj.vertical ? 2 * obj.halfSize.y : LEVEL_TRAVEL;
+    const moved = Math.sign(dy) * Math.max(0, Math.abs(dy) - deadzone);
     if (!g.volumeActive && moved === 0) return;
     g.volumeActive = true;
-    const target = clamp01(g.startVolume + moved / LEVEL_TRAVEL);
+    const target = clamp01(g.startVolume + moved / travel);
     const value = stepToward(g.volumeValue, target, VOLUME_MAX_RATE * Math.max(dt, 1 / 60));
     obj.volumeAdjust = value;
     if (value === g.volumeValue) return;
@@ -883,7 +1320,7 @@ export class InteractionController {
 
   /** Two different stems held one-per-hand form a blend pair; their hand spread sets isolation. */
   private updateBlend(points: Map<HandId, Point2>): void {
-    const single = this.objects.filter((o) => o.holders.length === 1);
+    const single = this.objects.filter((o) => o.holders.length === 1 && !o.vertical);
     const pair: [HoloObject, HoloObject] | null =
       single.length === 2 && single[0].holders[0] !== single[1].holders[0] ? [single[0], single[1]] : null;
     const same = pair && this.blendPair && pair[0] === this.blendPair[0] && pair[1] === this.blendPair[1];
@@ -1101,7 +1538,7 @@ export class InteractionController {
     let best: HoloObject | null = null;
     let bestOutside = GRAB_REACH + STRETCH_JOIN_REACH;
     for (const obj of this.objects) {
-      if (obj.holders.length !== 1 || obj.levelHand || obj.control || obj.returning) continue;
+      if (obj.holders.length !== 1 || obj.levelHand || obj.control || obj.returning || obj.vertical) continue;
       const { outside } = this.hitMetrics(point, obj);
       if (outside <= bestOutside) {
         best = obj;
@@ -1116,7 +1553,7 @@ export class InteractionController {
     let best: HoloObject | null = null;
     let bestScore = Infinity;
     for (const obj of this.objects) {
-      if (obj.holders.length >= 2 || obj.levelHand || obj.control || obj.returning) continue;
+      if (!canTake(obj) || obj.levelHand || obj.control || obj.returning || obj.vertical) continue;
       const { outside, centrality } = this.hitMetrics(point, obj);
       if (outside === 0 && centrality < bestScore) {
         best = obj;
@@ -1138,7 +1575,7 @@ export class InteractionController {
       const aim =
         g.strength > CLOSING_STRENGTH ? (sampleAt(this.aimHistory.get(hand.id), t - AIM_LOOKBACK_MS) ?? g.point) : g.point;
       const current = this.targets.get(hand.id);
-      const available = current && current.holders.length < 2 && !current.levelHand && !current.control;
+      const available = current && canTake(current) && !current.levelHand && !current.control;
       if (available && this.hitMetrics(aim, current).outside <= TARGET_EXIT) continue;
       const next = this.pick(aim);
       if (next) this.targets.set(hand.id, next);
@@ -1219,6 +1656,16 @@ function sampleAt(list: Sample[] | undefined, t: number): Point2 | null {
 function stepToward(from: number, target: number, maxStep: number): number {
   const d = target - from;
   return Math.abs(d) <= maxStep ? target : from + Math.sign(d) * maxStep;
+}
+
+/** Whether another hand may grab this object: fader bars take one hand, other stems two (stretch). */
+function canTake(obj: HoloObject): boolean {
+  return obj.vertical ? obj.holders.length === 0 : obj.holders.length < 2;
+}
+
+/** Distance (view-height units) between two view-space points. */
+function viewDist(a: Point2, b: Point2, aspect: number): number {
+  return Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 }
 
 /** Wrap an angle difference into (-π, π]. */

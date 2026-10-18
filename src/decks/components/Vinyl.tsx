@@ -123,6 +123,9 @@ export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
   const pulseRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<SVGCircleElement>(null);
   const surface = useRef<HTMLCanvasElement>(null);
+  const spinRef = useRef<HTMLDivElement>(null);
+  /** While scratching (from the spatial workstation): the spin animation's time and track position at the start. */
+  const scratchRef = useRef<{ t0: number; p0: number } | null>(null);
   const side = deck.id === 'A' ? 'left' : 'right';
   const title = deck.track
     ? [deck.track.title, ...deck.track.artists.slice(0, 2)].join(' · ')
@@ -140,6 +143,18 @@ export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
 
   useAnimationFrame(() => {
     const pos = engine.position(deck.id);
+
+    // A hand scratching this deck: the record turns with it (33⅓ rpm: 1 s of audio = 1/1.8 turn),
+    // by steering the spin animation's time, so on release it just carries on from there.
+    const anim = spinRef.current?.getAnimations()[0];
+    if (anim && deck.scratching) {
+      scratchRef.current ??= { t0: Number(anim.currentTime ?? 0), p0: pos };
+      const durMs = 1800 / deck.playbackRate;
+      const t = scratchRef.current.t0 + ((pos - scratchRef.current.p0) * 1000) / deck.playbackRate;
+      anim.currentTime = ((t % durMs) + durMs) % durMs;
+    } else {
+      scratchRef.current = null;
+    }
     const el = progressRef.current;
     if (el) {
       const duration = deck.durationSec;
@@ -166,7 +181,7 @@ export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
     >
       <div className="pulse" ref={pulseRef}>
         <div className="beat-glow" />
-        <div className="spin" style={{ animationDuration: `${1.8 / deck.playbackRate}s` }}>
+        <div className="spin" ref={spinRef} style={{ animationDuration: `${1.8 / deck.playbackRate}s` }}>
           <canvas ref={surface} className="surface" />
           <svg className="label" viewBox="0 0 100 100">
             <defs>

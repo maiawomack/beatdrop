@@ -158,7 +158,42 @@ All of it uses `setTargetAtTime` automation, so there are no clicks.
 The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared two-deck engine (`src/audio/AudioEngine.ts`, Task 1). Every gesture changes the songs playing on it.
 
 - **Loading songs:** `/` opens the song search (the library in `mp3/`). Enter loads deck A and Shift+Enter loads deck B. A song you load starts playing by itself if nothing else is.
-- **Holograms per deck:** each deck's stems stand as vertical bars, the way the decks screen shows its stem faders: deck A on the left, deck B on the right, in the decks screen's order (Vocals, Drums, Bass, Inst) and its colours (`STEM_COLORS` from `src/decks/theme.ts`, so a stem looks the same on both monitors). A full mix (every library song until it's split) is one bar in its deck's colour, labelled with the song title. Each bar has its filter knob above and its loop ring below. Bars are locked in place: grab and move up/down for volume (the bar fills like a fader), two hands apart vertically for echo.
+- **Holograms per deck:** each deck's stems are fader bars standing on the bottom edge of the screen, side by side, in the decks screen's order (Vocals, Drums, Bass, Inst) and its colours (`STEM_COLORS` from `src/decks/theme.ts`). Deck A is on the left and deck B on the right. A full mix (a song that hasn't been split) is one bar in its deck's colour, labelled with the song title.
+  - **What a bar shows:** it fills from the bottom to its volume, and the waveform plays inside the filled part. A faint track shows the full range.
+  - **The only bar gesture for now:** **pinch** near the top of a bar (its fill line, with a glowing handle) and drag up or down. The top follows your hand 1:1 (full track = full range).
+    - The grab band reaches about 0.1 view-height above the line and 0.12 below it, so it doesn't need precision.
+    - A pinch deeper inside the bar doesn't grab it, and fists do nothing on bars.
+  - **Removed from bars for now** (pinch gestures to come): tap to mute, twist to filter, loop and filter caps, two-hand stretch, blend/isolate, and clip pull-out. The controller code is still there for free-floating stems and clips.
+- **Records (scratch):** each loaded deck has a record above its bars, in the deck's colour, turning at 33⅓ rpm with the real playback position.
+  - **To scratch:** hold an **open palm** anywhere (fingers up or sideways, not hanging down) for about 0.2 s, then rock it back and forth. You don't need to be on a record: the left half of the screen scratches deck A, the right half deck B. Pinching a record also works.
+    - **What it follows:** whichever arc the hand makes each frame, with no double counting:
+      - **Tilting at the wrist,** like a windshield wiper, from the hand's in-plane angle `HandState.roll`.
+      - **The hand moving around a centre:** the record's centre when it's on a record, otherwise an invisible record just below where the hand started. Plain side-to-side counts as this.
+    - **Mapping:** clockwise (as you see it) = forward. One full turn = one revolution at 33⅓ rpm (1.8 s of audio).
+    - **Fast scratches:** the scrub voice predicts the hand between camera frames and allows up to 8× speed.
+    - **Both screens follow the scratch:** while a hand scratches a deck, `AudioEngine.getPositionSec()` reports the scratch position (what you hear), and the song keeps running underneath. So the decks screen's record (`src/decks/components/Vinyl.tsx`, which steers its spin animation from that position) and its waveform playhead turn with your hand, then carry on in time after you let go.
+    - **Excluded:** fingers hanging down (the lift pose).
+  - **To let go:** close your hand, or lose tracking. A pinched record also lets go if you move well off it.
+  - **Stays in time:** it's slip mode. The song keeps running underneath, so it carries on exactly where it would have been. Verified in headless Chrome: 0.00 s off.
+  - **Engine side:** `SCRATCH_START` / `SCRATCH_MOVE` / `SCRATCH_END` (Task 1 additions), played through an AudioWorklet scrub voice.
+- **Pinch** (held for about 0.15 s without closing into a fist) grabs what's under it:
+  - **a record:** scratch
+  - **the top of a bar:** volume
+  - **anywhere else:** nothing
+
+  It keeps that target until the pinch opens.
+- **Crossfader:** a small A–B fader at the top centre, between the records. Hold **one or two fingers up** (☝ or ✌) for about 0.12 s anywhere, then slide sideways.
+  - **The pose (forgiving):** the index is extended and roughly pointing up, the middle finger can be either way, and the ring and little fingers are mostly curled.
+  - **Movement:** relative to where it started; 0.5 view-height of travel = A to B. Lowering the fingers lets go. It's the same crossfader as the decks screen's, through `SET_CROSSFADER`.
+- **Tempo:** a small strip next to each record.
+  - **To change it:** pinch it and drag up (faster) or down (slower), relative to where you pinched. 0.3 view-height of travel = ±16%, with a notch at ×1.00. It holds when you let go.
+  - **To reset:** a quick pinch-tap goes back to ×1.00.
+  - **Display:** the strip shows `+3.2% · 132.1 BPM`.
+  - **Engine side:** it's the decks screen's tempo (`SET_PLAYBACK_RATE`), so her tempo fader moves too. It's turntable-style, so pitch follows.
+- **No mute on this screen for now:** tapping does nothing and the 1–9 keys are gone. Stems muted on the decks screen still show MUTED.
+- **No wobble:** fader bars ignore the hand-drift effect and don't grow, squeeze or shiver. They react with glow and fill only.
+- **Narrow frames:** on portrait or narrow camera frames, bars, records and spacing shrink sideways so both decks fit.
+- **Open palm detection:** `HandState.palm` in perception (fingers extended, with hysteresis). The lift pose and a fist never count as a palm.
 - **Adapter:** `src/bridge/task1Adapter.ts` translates spatial commands into engine commands, and engine state back into the spatial view (ids `A:vocals`, `A:full`, clips `A:full~1`).
 
 | Spatial gesture | Engine command | Scope |

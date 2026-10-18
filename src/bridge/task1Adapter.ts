@@ -44,6 +44,8 @@ export interface Task1Engine {
  *   setLoop    -> SET_LOOP_BEATS on the deck (the engine loops whole decks)
  *   createClip / removeClip -> CREATE_CLIP / REMOVE_CLIP
  *   setBuild / drop -> SET_BUILD / DROP
+ *   setCrossfader -> SET_CROSSFADER · scratch -> SCRATCH_START / _MOVE / _END
+ *   setTempo -> SET_PLAYBACK_RATE
  *   setSolo, setPan, grab, release -> not supported by the engine (ignored)
  *
  * State flows back from the engine on every change, so whatever Monitor 1
@@ -80,7 +82,27 @@ export class Task1Adapter implements AudioCommandSink, AudioStateSource {
 
   dispatch(command: AudioCommand): void {
     if (!isStemCommand(command)) {
-      this.engine.dispatch(command.type === 'setBuild' ? { type: 'SET_BUILD', value: command.value } : { type: 'DROP' });
+      switch (command.type) {
+        case 'setBuild':
+          this.engine.dispatch({ type: 'SET_BUILD', value: command.value });
+          break;
+        case 'drop':
+          this.engine.dispatch({ type: 'DROP' });
+          break;
+        case 'setCrossfader':
+          this.engine.dispatch({ type: 'SET_CROSSFADER', value: command.value });
+          break;
+        case 'setTempo':
+          this.engine.dispatch({ type: 'SET_PLAYBACK_RATE', deck: command.deck, rate: command.rate });
+          break;
+        case 'scratch': {
+          const { deck } = command;
+          if (command.phase === 'start') this.engine.dispatch({ type: 'SCRATCH_START', deck });
+          else if (command.phase === 'move') this.engine.dispatch({ type: 'SCRATCH_MOVE', deck, offsetSec: command.offsetSec });
+          else this.engine.dispatch({ type: 'SCRATCH_END', deck });
+          break;
+        }
+      }
       return;
     }
     const target = parseId(command.stemId);
@@ -181,6 +203,9 @@ export class Task1Adapter implements AudioCommandSink, AudioStateSource {
       dropAtMs: m.dropAtMs,
       dropQuantized: m.dropQuantized,
       drops: m.drops,
+      crossfader: m.crossfader,
+      scratching: DECK_IDS.filter((d) => s.decks[d].scratching),
+      tempo: { A: s.decks.A.playbackRate, B: s.decks.B.playbackRate },
     });
     this.transport = transportOf(s);
     for (const l of this.listeners) l();
