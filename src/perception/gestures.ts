@@ -254,6 +254,20 @@ export class GestureProcessor {
     return c;
   }
 
+  /** Current lift (build/drop) engage/release thresholds. */
+  get liftThresholds(): { on: number; off: number } {
+    return { on: this.cfg.lift.on, off: this.cfg.lift.off };
+  }
+
+  /**
+   * Personal lift thresholds from gesture calibration. Live detectors share this
+   * config object, so the change applies to hands already being tracked.
+   */
+  setLiftThresholds({ on, off }: { on: number; off: number }): void {
+    this.cfg.lift.on = on;
+    this.cfg.lift.off = off;
+  }
+
   clearCalibration(): void {
     this.classifier = null;
     this.samples = [];
@@ -263,6 +277,8 @@ export class GestureProcessor {
   /** @param aspect video width / height, used for distance correction */
   constructor(private aspect: number, config: Partial<GestureConfig> = {}) {
     this.cfg = { ...DEFAULT_GESTURE_CONFIG, ...config };
+    // Own copy, so a personal lift threshold (setLiftThresholds) never edits the shared default.
+    this.cfg.lift = { ...this.cfg.lift };
   }
 
   setAspect(aspect: number): void {

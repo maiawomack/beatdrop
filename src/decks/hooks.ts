@@ -28,15 +28,13 @@ export function useAnimationFrame(frame: (now: number) => void): void {
 export interface TrackExtras {
   waveform: TrackWaveform | null;
   lyrics: TrackLyrics | null;
-  /** Beat-grid phase; beats fall at firstBeatSec + k * 60 / bpm. */
-  firstBeatSec: number;
   /** Absolute URL of the cover art, if the song had any. */
   cover: string | null;
   /** The cover's most vivid color, for the background on this deck's side. */
   coverColor: string | null;
 }
 
-const NO_EXTRAS: TrackExtras = { waveform: null, lyrics: null, firstBeatSec: 0, cover: null, coverColor: null };
+const NO_EXTRAS: TrackExtras = { waveform: null, lyrics: null, cover: null, coverColor: null };
 
 /**
  * A cover's representative color: average of its pixels weighted toward saturated
@@ -67,7 +65,8 @@ async function vividColor(url: string): Promise<string | null> {
 }
 
 /**
- * Waveform, lyrics, beat grid and cover art for a deck's track, from its stems manifest.
+ * Waveform, lyrics and cover art for a deck's track, from its stems manifest.
+ * (The beat grid comes from the engine: deck.bpm / deck.firstBeatSec, estimated for full mixes.)
  * Full-mix tracks (not split yet) have none of these; their library artwork still counts.
  */
 export function useTrackExtras(track: TrackInfo | null): TrackExtras {
@@ -95,7 +94,7 @@ export function useTrackExtras(track: TrackInfo | null): TrackExtras {
       const cover = manifest.cover ? new URL(manifest.cover, url).href : artwork;
       const coverColor = cover ? await vividColor(cover).catch(() => null) : null;
       if (!abort.signal.aborted) {
-        setExtras({ waveform, lyrics, firstBeatSec: manifest.firstBeatSec, cover, coverColor });
+        setExtras({ waveform, lyrics, cover, coverColor });
       }
     })().catch(() => {
       // Extras are decoration; the deck still plays without them.

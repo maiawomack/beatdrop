@@ -95,35 +95,58 @@ IDLE ──near──► HOVER ──fist──┬─ on stem body ─► GRABBI
 
 `interaction.handModes` exposes the current state of each hand. The cursor label shows it (MOVE, LOOP, FILTER, BUILD, DROP, LOST), and so does the debug HUD (`H`).
 
-### Grab calibration
+### Gesture calibration (Perceptron AI)
 
-Press `C` to teach the app your own grab poses: about 5 s of open/relaxed hands, then about 6 s of fists.
+Everyone grabs and lifts a little differently. The calibration stage personalizes the two
+gestures with tunable thresholds, using **Perceptron AI** (DubHacks Perception track) to make
+sure BeatDrop only learns from demonstrations that actually show the gesture.
 
-- **Model:** a k-nearest-neighbour classifier (`src/perception/grabClassifier.ts`) on rotation- and mirror-invariant joint-distance features. It then decides grabs.
-- **Storage:** the model is saved in localStorage. `Shift+C` clears it.
+It's offered once when you first click **Start session**, and opened any time with `C`.
+`Shift+C` resets everything to the defaults.
 
-#### Perceptron check (optional)
+1. **Demonstrate:** open hand, then fist, then the lift pose. Each one is about 4 s, after a
+   countdown that starts once a hand is steadily in view.
+2. **Perceptron finds the moments.** The demo goes to Perceptron's `perceptron-mk1.5` model as a
+   short video (`video_frames`, 5 fps), and two capabilities are cross-checked:
+   - **video event finding:** clip annotations mark *when* the gesture is held;
+   - **image understanding:** a strict-JSON pose label for frames across the demo.
 
-Samples are labeled by the on-screen prompt, so frames where the hand was still closing,
-half-open or out of view would be learned with the wrong label. With the check on, the page
-takes a small snapshot about twice a second during each step. When calibration ends,
-Perceptron (`perceptron-mk1.5`) names the pose in each snapshot, and hand samples recorded
-near a snapshot that doesn't show the requested pose are dropped before training.
+   A moment counts only where both agree. Neither was reliable alone in testing: on a video
+   with no hand, event finding still returned an interval.
+3. **Feedback:** confirmed for at least 1.2 s gives **✓**. Otherwise, *"Perceptron saw no fist in
+   that demo. R = try again · S = skip"*.
+4. **Personal profile:** built only from MediaPipe data inside the confirmed moments.
+   - **Grab:** the per-user k-NN classifier (`src/perception/grabClassifier.ts`), trained on
+     confirmed open and fist samples.
+   - **Build/drop:** a personal lift threshold, set just above the user's 90th-percentile
+     fingertip bunch (bounded to 0.35–0.95, release 0.25 higher, like the default).
+5. **Before/after:** the summary reports how the defaults did on *your* confirmed demos. For
+   example, *"lift threshold 0.55 → 0.67: the default caught 0% of your lift frames, yours catches
+   100%"*, or how often the default fist rule caught your fist and misfired on your open hand.
 
-- **What Perceptron decides:** only the pose name per snapshot, as validated JSON. Which poses
-  count for each step, and the model itself, stay local: thresholds still come from MediaPipe.
-- **Consent:** the first time you press `C` with Perceptron set up, you're asked once (`Y`/`N`).
-  `N` keeps calibration on this computer. `Shift+C` resets the answer.
-- **Privacy:** snapshots (384 px JPEGs, not video) are kept in memory only until the check finishes.
-  The API key never reaches the browser.
-- **Fallback:** no key, service offline, slow or bad answer → trains on every sample, as before.
-  Live performance never calls Perceptron.
-- **Setup:** `pip install "perceptron>=0.4.0"` (in `tools/stems/requirements.txt`), put
-  `PERCEPTRON_API_KEY=...` in `.env.local` at the repo root (git-ignored), and run
-  `tools/stems/separation_server.py`, which serves `POST /gesture/assess`
-  ([`tools/perceptron/gesture_check.py`](../tools/perceptron/gesture_check.py)).
-- **Code:** `src/spatial/perceptronCalibration.ts` (snapshots, consent, sample matching; tested in
-  `perceptronCalibration.test.ts`). The browser console logs what Perceptron saw.
+**Principles:**
+- **Perceptron never sets a threshold.** It decides *when* the gesture happened; the numbers come
+  from MediaPipe landmarks.
+- **Optional, with consent.** The offer screen asks first: `Y` = with Perceptron, `L` = locally
+  (nothing uploaded), `N` = skip. Frames are small 384 px JPEGs, held in memory for the request
+  and never stored. The API key stays in the local service and never reaches the browser.
+- **Fallback.** If Perceptron is offline or errors, the demo is used as recorded (the old
+  behavior) and the summary says so.
+- **No live latency.** Live performance never calls Perceptron.
+
+**Storage:** grab model `beatdrop.grabModel.v2`, lift thresholds `beatdrop.liftThresholds.v1`
+(localStorage).
+
+**Setup:** run `pip install "perceptron>=0.4.0"` (it's in `tools/stems/requirements.txt`), put
+`PERCEPTRON_API_KEY=...` in `.env.local` at the repo root (git-ignored), and run
+`tools/stems/separation_server.py`, which serves `POST /gesture/segments`.
+
+**Code:**
+- `tools/perceptron/gesture_check.py`: Perceptron calls and validation.
+- `src/spatial/calibrationStage.ts`: the stage, tested in `calibrationStage.test.ts`.
+- `src/spatial/perceptronCalibration.ts`: recording and the client.
+
+The browser console logs what Perceptron confirmed for each demo.
 
 ### Keyboard
 
@@ -133,7 +156,7 @@ near a snapshot that doesn't show the requested pose are dropped before training
 | `1` / `2` / `3` | Mute Drums / Vocals / Bass |
 | `Shift+1..3` | Solo |
 | `R` | Reset layout |
-| `C` | Calibrate grab |
+| `C` | Calibrate gestures (Perceptron AI) · `Shift+C` reset |
 | `H` | Debug HUD (hand states, engine values) |
 | `D` | Record a debug session |
 

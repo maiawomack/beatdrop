@@ -161,7 +161,7 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
           </div>
         )}
         {ready && <span className={`source-chip is-${deck.source}`}>{deck.source === 'stems' ? 'stems' : 'full mix'}</span>}
-        <Waveform deck={deck} engine={engine} waveform={extras.waveform} firstBeatSec={extras.firstBeatSec} />
+        <Waveform deck={deck} engine={engine} waveform={extras.waveform} firstBeatSec={deck.firstBeatSec} />
         <Overview deck={deck} engine={engine} waveform={extras.waveform} />
       </div>
 

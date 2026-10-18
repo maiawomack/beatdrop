@@ -82,8 +82,8 @@ export function App({ engine }: { engine: EngineStore }) {
   return (
     <div className="backdrop" style={backdrop}>
       <Stage />
-      <Vinyl deck={state.decks.A} engine={engine} firstBeatSec={extrasA.firstBeatSec} crossfader={state.mixer.crossfader} />
-      <Vinyl deck={state.decks.B} engine={engine} firstBeatSec={extrasB.firstBeatSec} crossfader={state.mixer.crossfader} />
+      <Vinyl deck={state.decks.A} engine={engine} firstBeatSec={state.decks.A.firstBeatSec} crossfader={state.mixer.crossfader} />
+      <Vinyl deck={state.decks.B} engine={engine} firstBeatSec={state.decks.B.firstBeatSec} crossfader={state.mixer.crossfader} />
 
       <main className="app">
         <TopBar recorder={recorder} />

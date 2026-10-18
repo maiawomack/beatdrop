@@ -158,6 +158,8 @@ export class RemoteEngine implements EngineLike {
   private state: AudioEngineState = emptyEngineState();
   private listeners = new Set<(state: AudioEngineState) => void>();
   private telemetry: { at: number; decks: Record<DeckId, DeckTelemetry> } | null = null;
+  /** When the latest state arrived (performance.now()), to tell which source is fresher. */
+  private stateAt = -Infinity;
   private envelopes = new Map<string, { data: Float32Array; rate: number; duration: number }>();
   private requested = new Set<string>();
   private lastHeard = -Infinity;
@@ -217,10 +219,18 @@ export class RemoteEngine implements EngineLike {
   }
 
   getPositionSec(deck: DeckId): number {
-    const t = this.telemetry?.decks[deck];
-    if (t) return t.playing ? t.positionSec + ((performance.now() - this.telemetry!.at) / 1000) * t.rate : t.positionSec;
     const d = this.state.decks[deck];
-    return d.playing ? d.positionSec + ((Date.now() - d.positionAt) / 1000) * d.playbackRate : d.positionSec;
+    // Paused or stopped: the host stamped the exact position. (Telemetry stops when nothing
+    // plays, so its last packet still says "playing" and must not be extrapolated.)
+    if (!d.playing) return d.positionSec;
+    const tel = this.telemetry;
+    const t = tel?.decks[deck];
+    // Telemetry, unless the state changed since (play, seek, tempo). It also carries the
+    // scratch position, which the state doesn't.
+    if (tel && t?.playing && (tel.at >= this.stateAt || d.scratching)) {
+      return t.positionSec + ((performance.now() - tel.at) / 1000) * t.rate;
+    }
+    return d.positionSec + ((Date.now() - d.positionAt) / 1000) * d.playbackRate;
   }
 
   getChannelLevel(deck: DeckId, channel: ChannelKey): number {
@@ -236,7 +246,7 @@ export class RemoteEngine implements EngineLike {
     const t = this.telemetry?.decks[deck];
     const c = t?.clips[clipId];
     if (!clip || !c || !t) return clip?.startSec ?? 0;
-    const elapsed = t.playing ? ((performance.now() - this.telemetry!.at) / 1000) * t.rate : 0;
+    const elapsed = t.playing && this.state.decks[deck].playing ? ((performance.now() - this.telemetry!.at) / 1000) * t.rate : 0;
     const len = clip.endSec - clip.startSec;
     return clip.startSec + mod(c.positionSec - clip.startSec + elapsed, len);
   }
@@ -274,6 +284,7 @@ export class RemoteEngine implements EngineLike {
     switch (msg.type) {
       case 'state':
         this.state = msg.state;
+        this.stateAt = performance.now();
         for (const l of this.listeners) l(this.state);
         break;
       case 'telemetry':

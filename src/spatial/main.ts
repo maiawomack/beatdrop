@@ -17,13 +17,7 @@ import { searchLibrary } from '../library/api';
 import { DECK_IDS, type AudioEngineState, type DeckId } from '../shared/types';
 import { createSearchBar } from '../ui/SearchBar';
 import { EngineHandle } from './engineHandle';
-import {
-  CalibrationSnapshots,
-  checkSnapshots,
-  perceptronAvailable,
-  perceptronConsent,
-  setPerceptronConsent,
-} from './perceptronCalibration';
+import { CalibrationStage } from './calibrationStage';
 import {
   GrabClassifier,
   PerceptionPipeline,
@@ -183,23 +177,28 @@ function saveGrabModel(c: GrabClassifier): void {
   }
 }
 
-/**
- * Grab calibration (press C): a few seconds of open hands, then a few seconds
- * of grab poses (pincer, fist, wrap-around). The perception layer learns
- * the user's own poses from these samples.
- */
-interface CalibrationStep {
-  label: 0 | 1 | null;
-  ms: number;
-  title: string;
-  detail: string;
+/** Personal build/drop lift thresholds from gesture calibration (calibrationStage.ts). */
+const LIFT_KEY = 'beatdrop.liftThresholds.v1';
+/** Set once the calibration stage has been offered at session start (it stays on C after). */
+const OFFERED_KEY = 'beatdrop.calibrationOffered.v1';
+
+function loadLift(): { on: number; off: number } | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(LIFT_KEY) ?? 'null') as { on?: unknown; off?: unknown } | null;
+    return t && typeof t.on === 'number' && typeof t.off === 'number' && t.on < t.off ? { on: t.on, off: t.off } : null;
+  } catch {
+    return null;
+  }
 }
-const CALIBRATION: CalibrationStep[] = [
-  { label: null, ms: 1500, title: 'Get ready: OPEN hands', detail: 'Next: hands open or relaxed — anything that is NOT a grab' },
-  { label: 0, ms: 5000, title: 'OPEN', detail: 'Relaxed, spread, half-curled, pointing, pinching. Move around. Both hands.' },
-  { label: null, ms: 1500, title: 'Get ready: FIST', detail: 'Next: close your hand into a fist' },
-  { label: 1, ms: 6000, title: 'FIST', detail: 'Close your hand into a fist (loose or tight). Move around. Both hands.' },
-];
+
+function store(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable: settings last for this session */
+  }
+}
 
 async function main(): Promise<void> {
   hud.textContent = 'Starting camera + loading hand model + preparing audio…';
@@ -252,46 +251,32 @@ async function main(): Promise<void> {
     }
   });
 
+  // spatial.html?recalibrate: forget saved calibration and offer it again at Start session.
+  const params = new URLSearchParams(location.search);
+  if (params.has('recalibrate')) {
+    for (const key of [MODEL_KEY, LIFT_KEY, OFFERED_KEY]) store(key, null);
+    params.delete('recalibrate');
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`);
+  }
   pipeline.gestures.classifier = loadGrabModel();
-  let calib: { step: number; stepStart: number } | null = null;
-  let calibDone: { at: number; text: string; detail?: string } | null = null;
+  let calibDone: { at: number; text: string } | null = null;
+  const defaultLift = pipeline.gestures.liftThresholds;
+  const savedLift = loadLift();
+  if (savedLift) pipeline.gestures.setLiftThresholds(savedLift);
 
-  // Optional Perceptron check of the calibration poses (see perceptronCalibration.ts).
-  const snapshots = new CalibrationSnapshots(video);
-  let perceptronReady = false;
-  void perceptronAvailable().then((ok) => (perceptronReady = ok));
-  /** Waiting for Y/N before anything is sent to Perceptron for the first time. */
-  let consentPending = false;
-  /** Perceptron is reviewing the snapshots of the calibration that just ended. */
-  let checking = false;
-  const startCalibration = () => {
-    snapshots.take();
-    calib = { step: 0, stepStart: performance.now() };
-    pipeline.gestures.collect(null);
-  };
-  const finishCalibration = async () => {
-    const snaps = snapshots.take();
-    let keep: Parameters<typeof pipeline.gestures.finishCalibration>[0];
-    let note = '';
-    if (perceptronReady && perceptronConsent() === true && snaps.length > 0) {
-      checking = true;
-      const result = await checkSnapshots(snaps);
-      checking = false;
-      if (result.ok) {
-        keep = result.keep;
-        note = `Perceptron dropped ${result.dropped} of ${result.total} snapshots that didn't show the pose`;
-        console.info('[calibration] Perceptron saw:', result.poses.join(' '));
-      } else {
-        note = `Perceptron unavailable (${result.error}): trained on every sample`;
-      }
-    }
-    const c = pipeline.gestures.finishCalibration(keep);
-    const { open, grab } = c.counts;
-    calibDone = c.ready
-      ? { at: performance.now(), text: `Calibrated ✓  (${open} open / ${grab} grab samples)`, detail: note }
-      : { at: performance.now(), text: 'Not enough hand samples: press C to try again', detail: note };
-    if (c.ready) saveGrabModel(c);
-  };
+  // Gesture calibration stage (press C, or offered at the first session start): the
+  // user demonstrates each gesture and Perceptron AI confirms when it was performed.
+  let searchAfterCalibration = false;
+  const calibration = new CalibrationStage({
+    video,
+    gestures: pipeline.gestures,
+    saveGrab: saveGrabModel,
+    saveLift: (t) => store(LIFT_KEY, JSON.stringify(t)),
+    onClose: () => {
+      if (searchAfterCalibration && !DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) openSearch();
+      searchAfterCalibration = false;
+    },
+  });
 
   const recorder = new InteractionRecorder({ aspect: aspect0, gesture: GRAB_GESTURE, userAgent: navigator.userAgent });
   const interaction = new InteractionController(
@@ -316,7 +301,20 @@ async function main(): Promise<void> {
     engine.resume();
     startButton.hidden = true;
     hint.hidden = true;
-    if (!DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) openSearch();
+    let offered = true;
+    try {
+      offered = localStorage.getItem(OFFERED_KEY) !== null;
+    } catch {
+      /* no storage: don't nag */
+    }
+    if (!offered) {
+      // First session on this browser: offer gesture calibration (skippable), then search.
+      store(OFFERED_KEY, '1');
+      searchAfterCalibration = true;
+      void calibration.open();
+    } else if (!DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) {
+      openSearch();
+    }
   });
 
   const togglePlay = (deck: DeckId) => {
@@ -330,15 +328,8 @@ async function main(): Promise<void> {
       return;
     }
     const key = e.key.toLowerCase();
-    if (consentPending) {
-      // Asked once, before the first upload: Y = use Perceptron, N = calibrate locally.
-      if (key === 'y' || key === 'n') {
-        setPerceptronConsent(key === 'y');
-        consentPending = false;
-        startCalibration();
-      } else if (key === 'escape') {
-        consentPending = false;
-      }
+    if (calibration.handleKey(key, performance.now())) {
+      e.preventDefault();
       return;
     }
     if (key === '/') {
@@ -364,12 +355,12 @@ async function main(): Promise<void> {
         } catch {
           /* ignore */
         }
-        setPerceptronConsent(null);
-        calibDone = { at: performance.now(), text: 'Calibration cleared: using default fist grip' };
-      } else if (!calib && !checking) {
-        void perceptronAvailable().then((ok) => (perceptronReady = ok));
-        if (perceptronReady && perceptronConsent() === null) consentPending = true;
-        else startCalibration();
+        pipeline.gestures.setLiftThresholds(defaultLift);
+        store(LIFT_KEY, null);
+        store(OFFERED_KEY, null); // offer calibration again at the next Start session
+        calibDone = { at: performance.now(), text: 'Calibration cleared: default fist grip and lift. Press C to calibrate.' };
+      } else {
+        void calibration.open();
       }
     }
     if (key === 'd') recorder.toggle();
@@ -466,47 +457,20 @@ async function main(): Promise<void> {
     syncClips(audio, interaction);
     syncFromEngine(stems, audio, interaction);
     interaction.setAspect(aspect);
-    interaction.update(frame);
+    // While calibrating, the demonstrated gestures (open palm, fist, lift) must not scratch,
+    // grab or build: the controls see no hands, so anything held is released.
+    const controlFrame = calibration.active ? { ...frame, hands: [] } : frame;
+    interaction.update(controlFrame);
     drift.setAspect(aspect);
-    drift.step(interaction.objects, frame);
+    drift.step(interaction.objects, controlFrame);
 
     lastFrame = frame;
-    if (calib) {
-      const step = CALIBRATION[calib.step];
-      if (frame.timestamp - calib.stepStart >= step.ms) {
-        calib.step++;
-        calib.stepStart = frame.timestamp;
-        if (calib.step >= CALIBRATION.length) {
-          pipeline.gestures.collect(null);
-          calib = null;
-          void finishCalibration();
-        } else {
-          pipeline.gestures.collect(CALIBRATION[calib.step].label);
-        }
-      }
-    }
-    if (calib) {
-      // Snapshots only if the user agreed to the Perceptron check.
-      const label = CALIBRATION[calib.step].label;
-      if (label !== null && perceptronReady && perceptronConsent() === true) snapshots.capture(label, frame.timestamp);
-    }
-    if (consentPending) {
-      banner = {
-        title: 'Check poses with Perceptron?',
-        detail:
-          "Send small webcam snapshots (not video) to Perceptron AI so frames where your hand\n" +
-          "wasn't in the pose are left out. Used once for this check, never stored.\n" +
-          'Y = yes, use Perceptron   ·   N = no, calibrate on this computer only',
-      };
-    } else if (calib) {
-      const step = CALIBRATION[calib.step];
-      const left = Math.max(0, step.ms - (frame.timestamp - calib.stepStart)) / 1000;
-      const n = pipeline.gestures.sampleCounts;
-      banner = { title: step.title, detail: `${step.detail}\n${left.toFixed(1)}s   ·   ${n.open} open / ${n.grab} grab` };
-    } else if (checking) {
-      banner = { title: 'Checking poses…', detail: 'Perceptron is reviewing your calibration snapshots' };
-    } else if (calibDone && frame.timestamp - calibDone.at < (calibDone.detail ? 4500 : 2500)) {
-      banner = { title: calibDone.text, detail: calibDone.detail ?? '' };
+    calibration.update(frame);
+    const stageBanner = calibration.banner(frame.timestamp);
+    if (stageBanner) {
+      banner = stageBanner;
+    } else if (calibDone && frame.timestamp - calibDone.at < 2500) {
+      banner = { title: calibDone.text, detail: '' };
     } else {
       banner = null;
     }
@@ -532,8 +496,8 @@ async function main(): Promise<void> {
     const perf = audio.perf;
     const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
     hud.textContent =
-      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   engine: ${engine.mode}${engine.connected ? '' : ' (lost)'}   audio: ${engine.audioState}\n` +
-      `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record  [H] hide\n` +
+      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C to calibrate)'}   engine: ${engine.mode}${engine.connected ? '' : ' (lost)'}   audio: ${engine.audioState}\n` +
+      `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [R] reset layout  [C] calibrate gestures (Perceptron)  [⇧C] reset  [D] record  [H] hide\n` +
       `modes  ${modes}\n${perfLine}\n` +
       `Left : ${describe(byId('Left'))}\n` +
       `Right: ${describe(byId('Right'))}\n` +

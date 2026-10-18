@@ -17,6 +17,7 @@ class FakeEngine {
     this.log.push(c);
     if (c.type === 'SET_STEM_GAIN') this.state.decks[c.deck].stems[c.stem].gain = c.gain;
     if (c.type === 'PLAY') this.state.decks[c.deck].playing = true;
+    if (c.type === 'PAUSE') Object.assign(this.state.decks[c.deck], { playing: false, positionSec: 42.5, positionAt: Date.now() });
     this.emit();
   }
   getState() {
@@ -105,6 +106,23 @@ describe('engine sharing between windows', () => {
       expect.closeTo(0.5),
       expect.closeTo(1),
     ]);
+  });
+
+  it('a paused deck stays put (the last telemetry before the pause must not keep it moving)', async () => {
+    const engine = new FakeEngine();
+    engine.state.decks.A.status = 'ready';
+    engine.state.decks.A.source = 'full';
+    host(engine);
+    const spatial = client();
+    await spatial.waitForHost(500);
+    await spatial.dispatch({ type: 'PLAY', deck: 'A' });
+    await settle(120);
+    await spatial.dispatch({ type: 'PAUSE', deck: 'A' }); // nothing plays now: telemetry stops
+    await settle();
+    const paused = spatial.getPositionSec('A');
+    await settle(150);
+    expect(paused).toBeCloseTo(42.5);
+    expect(spatial.getPositionSec('A')).toBe(paused);
   });
 
   it('forwards resume to the host (to start audio from the other window)', async () => {

@@ -682,11 +682,13 @@ export class InteractionController {
     return Math.atan2((p.x - c.x) * this.aspect, c.y - p.y);
   }
 
-  /** The record of the deck on this side of the screen (left = A, right = B), or the only one shown. */
+  /**
+   * The record of the deck on this side of the screen: left half = A, right half = B.
+   * Strictly by side, even with one deck loaded, so a hand never reaches across the
+   * screen to the other deck's record.
+   */
   private platterForSide(p: Point2): Platter | undefined {
-    const free = this.platters.filter((pl) => !pl.hand);
-    if (free.length <= 1) return free[0];
-    return free.find((pl) => pl.deck === (p.x < 0.5 ? 'A' : 'B'));
+    return this.platters.find((pl) => !pl.hand && pl.deck === (p.x < 0.5 ? 'A' : 'B'));
   }
 
   /** The tempo strip under (or near) this point, if free. */

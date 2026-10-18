@@ -62,6 +62,16 @@ describe('open-palm controls', () => {
     expect(scratches()).toHaveLength(0);
   });
 
+  it('a palm on the right half never takes deck A, even when A is the only deck loaded', () => {
+    // Deck A's record sits on the left; an open palm resting on the right side stays idle.
+    rest({ x: 0.8, y: 0.5 }, SCRATCH_ARM_MS + 4 * FRAME_MS);
+    expect(scratches()).toHaveLength(0);
+    // The same palm on the left half (off the record) does take deck A.
+    rig.frame(palm('Right', { x: 0.8, y: 0.5 }, 'end'));
+    rest({ x: 0.3, y: 0.6 }, SCRATCH_ARM_MS + 2 * FRAME_MS);
+    expect(scratches()[0]).toMatchObject({ phase: 'start' });
+  });
+
   it('an open-palm scratch keeps going wherever the hand moves (only opening / turning it lets go)', () => {
     rest(rec, SCRATCH_ARM_MS + 2 * FRAME_MS);
     rig.frame(palm('Right', { x: 0.6, y: 0.6 }));
