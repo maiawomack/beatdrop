@@ -1,6 +1,6 @@
 import type { LoopView, WaveformSource } from '../ar/waveforms';
 import { beatAt, type AudioStateSource } from '../audio/AudioCommands';
-import type { AudioEngine } from '../audio/AudioEngine';
+import type { EngineLike } from '../integration/engineSync';
 import { parseId } from './task1Adapter';
 
 /** Seconds of audio visible across a waveform (playhead in the middle). */
@@ -12,7 +12,7 @@ const WINDOW_SECONDS = 4;
  * loop regions. `state` is the Task1Adapter, so ids are `A:vocals`, `A:full`,
  * `A:vocals~1`...
  */
-export function createTask1Waveforms(engine: AudioEngine, state: AudioStateSource): WaveformSource {
+export function createTask1Waveforms(engine: EngineLike, state: AudioStateSource): WaveformSource {
   const resolve = (id: string) => {
     const t = parseId(id);
     if (!t) return null;

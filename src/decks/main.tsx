@@ -8,10 +8,14 @@ import './theme.css';
 
 import { createRoot } from 'react-dom/client';
 import { AudioEngine } from '../audio/AudioEngine';
+import { hostEngine } from '../integration/engineSync';
 import { EngineStore } from './engineStore';
 import { App } from './App';
 
 // This window owns the audio engine (Task 1). Exactly one window may construct it.
-const engine = new EngineStore(new AudioEngine());
+const audio = new AudioEngine();
+// Share it with the spatial workstation (Monitor 2), which mirrors it instead of playing its own.
+hostEngine(audio);
+const engine = new EngineStore(audio);
 
 createRoot(document.getElementById('root')!).render(<App engine={engine} />);

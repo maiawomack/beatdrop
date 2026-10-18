@@ -7,7 +7,6 @@ import { InteractionController } from '../ar/InteractionController';
 import { NeonScene } from '../ar/NeonScene';
 import { WaveformRenderer } from '../ar/WaveformRenderer';
 import { beatAt, wallNow, type AudioStateSource } from '../audio/AudioCommands';
-import { AudioEngine } from '../audio/AudioEngine';
 import { createStemAudioBridge } from '../bridge/stemAudioBridge';
 import { Task1Adapter } from '../bridge/task1Adapter';
 import { createTask1Waveforms } from '../bridge/task1Waveforms';
@@ -16,6 +15,7 @@ import { InteractionRecorder } from '../debug/recorder';
 import { searchLibrary } from '../library/api';
 import { DECK_IDS, type AudioEngineState, type DeckId } from '../shared/types';
 import { createSearchBar } from '../ui/SearchBar';
+import { EngineHandle } from './engineHandle';
 import {
   GrabClassifier,
   PerceptionPipeline,
@@ -92,6 +92,14 @@ function statusText(engine: AudioStateSource, state: AudioEngineState): string {
     pos = '   ' + Array.from({ length: t.beatsPerBar }, (_, i) => (i === inBar ? '●' : '○')).join('');
   }
   return decks.join('   ') + pos;
+}
+
+/** Where the audio lives, and anything the performer needs to do about it. */
+function connectionText(engine: EngineHandle, justSwitched: boolean): string {
+  if (engine.mode === 'standalone') return 'STANDALONE · NO DECKS SCREEN   ';
+  if (!engine.connected) return '⚠ DECKS SCREEN CLOSED   ';
+  if (engine.audioState === 'suspended') return '🔇 CLICK THE DECKS SCREEN ONCE TO ENABLE AUDIO   ';
+  return justSwitched ? '⇄ CONNECTED TO DECKS SCREEN   ' : '⇄ DECKS   ';
 }
 
 function truncate(s: string, n: number): string {
@@ -181,17 +189,19 @@ const CALIBRATION: CalibrationStep[] = [
 
 async function main(): Promise<void> {
   hud.textContent = 'Starting camera + loading hand model + preparing audio…';
-  // The shared two-deck engine (Task 1). This window owns it; gestures reach it
+  // The shared two-deck engine (Task 1), owned by the decks screen (Monitor 1)
+  // and mirrored here; standalone if no decks screen is open. Gestures reach it
   // through the adapter, so every hand interaction changes the actual songs.
-  const engine = new AudioEngine();
+  const [engine, pipeline] = await Promise.all([EngineHandle.create(), PerceptionPipeline.create(video)]);
   const audio = new Task1Adapter(engine);
-  const pipeline = await PerceptionPipeline.create(video);
+  let switchedAt = -Infinity;
+  engine.onSwitch = () => (switchedAt = performance.now());
   fitStage();
   window.addEventListener('resize', fitStage);
   window.addEventListener('pagehide', () => {
     audio.close();
     pipeline.dispose();
-    void engine.ctx.close();
+    engine.close();
   });
 
   const aspect0 = video.videoWidth / video.videoHeight;
@@ -250,7 +260,7 @@ async function main(): Promise<void> {
   // Browsers only allow audio to start from a user gesture.
   startButton.hidden = false;
   startButton.addEventListener('click', () => {
-    void engine.resume();
+    engine.resume();
     startButton.hidden = true;
     hint.hidden = true;
     if (!DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) openSearch();
@@ -269,7 +279,7 @@ async function main(): Promise<void> {
     const key = e.key.toLowerCase();
     if (key === '/') {
       e.preventDefault();
-      void engine.resume();
+      engine.resume();
       startButton.hidden = true;
       hint.hidden = true;
       openSearch();
@@ -311,7 +321,7 @@ async function main(): Promise<void> {
       e.preventDefault();
       startButton.hidden = true;
       hint.hidden = true;
-      void engine.resume();
+      engine.resume();
       // Pause everything if anything plays, otherwise play every loaded deck.
       const ready = DECK_IDS.filter((d) => audio.state.decks[d].status === 'ready');
       const anyPlaying = ready.some((d) => audio.state.decks[d].playing);
@@ -365,7 +375,7 @@ async function main(): Promise<void> {
     waveforms.pulse = neon.pulse;
     waveforms.energy = neon.energy;
     waveforms.impact = neon.impact;
-    const line = statusText(audio, audio.state);
+    const line = connectionText(engine, now - switchedAt < 4000) + statusText(audio, audio.state);
     if (status.textContent !== line) status.textContent = line;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     neon.drawBackground(ctx);
@@ -438,7 +448,7 @@ async function main(): Promise<void> {
     const perf = audio.perf;
     const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
     hud.textContent =
-      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   audio: ${engine.ctx.state}\n` +
+      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   engine: ${engine.mode}${engine.connected ? '' : ' (lost)'}   audio: ${engine.audioState}\n` +
       `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [1-9] mute  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record  [H] hide\n` +
       `modes  ${modes}\n${perfLine}\n` +
       `Left : ${describe(byId('Left'))}\n` +
