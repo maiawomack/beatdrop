@@ -5,6 +5,7 @@ import '@fontsource-variable/shantell-sans/full.css';
 // Rubik: simple type for numbers, lyrics and controls.
 import '@fontsource-variable/rubik';
 import './theme.css';
+import './swirl.css'; // experiment: swirling background (delete this line to undo)
 
 import { createRoot } from 'react-dom/client';
 import { AudioEngine } from '../audio/AudioEngine';

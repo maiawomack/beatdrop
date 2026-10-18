@@ -8,6 +8,8 @@
  * MediaPipe data from inside those moments is used:
  *   - OPEN + FIST -> the personal grab model (existing k-NN classifier)
  *   - LIFT        -> a personal threshold for the build/drop lift pose
+ *   - PINCH, FINGER UP -> checks: how often BeatDrop's own detectors caught the moments
+ *     Perceptron confirmed (stem volume, crossfade); nothing is changed
  * A demo Perceptron rejects gets feedback and a retry. Perceptron never sets thresholds,
  * and the stage is optional: skip it, or calibrate locally without uploading anything.
  */
@@ -28,6 +30,8 @@ import {
 interface StepDef {
   key: CalibrationGesture;
   title: string;
+  /** What BeatDrop uses the gesture for (shown on the card). */
+  use: string;
   /** What Perceptron should have seen, for feedback ("saw a fist for 2.6 s"). */
   noun: string;
   /** Bare form for "saw no fist" / "saw only 0.8 s of lift pose". */
@@ -38,13 +42,20 @@ interface StepDef {
 }
 
 export const STEPS: StepDef[] = [
-  { key: 'open', title: 'OPEN HAND', noun: 'an open hand', bare: 'open hand', label: 0,
-    instruction: 'Show your hand open and relaxed. Move it around a little.' },
-  { key: 'fist', title: 'FIST', noun: 'a fist', bare: 'fist', label: 1,
+  { key: 'open', title: 'OPEN PALM', use: 'scratch', noun: 'an open hand', bare: 'open hand', label: 0,
+    instruction: 'Hold your hand up, open, palm to the camera. Move it around a little.' },
+  { key: 'fist', title: 'FIST', use: 'tempo', noun: 'a fist', bare: 'fist', label: 1,
     instruction: 'Close your hand into a fist and hold it. Move it around a little.' },
-  { key: 'lift', title: 'LIFT (build / drop)', noun: 'the lift pose', bare: 'lift pose', label: null,
-    instruction: 'Turn your hand over and bunch your fingertips together, pointing down,\nlike holding something up by a string.' },
+  { key: 'pinch', title: 'PINCH', use: 'stem volume', noun: 'a pinch', bare: 'pinch', label: null,
+    instruction: 'Make an OK sign: thumb and index fingertip touching, the other fingers relaxed.\nTurn your hand a little sideways so the camera can see the fingertips touch. Hold it.' },
+  { key: 'point', title: 'FINGER UP', use: 'crossfade', noun: 'a finger pointing up', bare: 'finger pointing up', label: null,
+    instruction: 'Point one or two fingers straight up (☝ or ✌), the others folded.' },
+  { key: 'lift', title: 'LIFT', use: 'build & drop', noun: 'the lift pose', bare: 'lift pose', label: null,
+    instruction: 'Let your fingers hang down together, like holding something up by a string.' },
 ];
+
+/** Live detector checks reported in the summary (Perceptron-confirmed frames the detector caught). */
+const DETECTOR_OK = 0.7;
 
 const HAND_STEADY_MS = 600;
 const COUNTDOWN_MS = 2400;
@@ -76,6 +87,34 @@ export interface FrameStat {
   grip: number;
   /** Lift measure (lower = more bunched); >= 1.4 when not pointing down. */
   lift: number;
+  /** BeatDrop's live detectors on this frame (open palm = scratch, pinch = bars, finger up = crossfade). */
+  palm: boolean;
+  pinch: boolean;
+  point: boolean;
+}
+
+/** One step's dot on the card. */
+export type StepState = 'done' | 'skipped' | 'current' | 'todo';
+
+/** Everything the calibration card draws (calibrationCard.ts). */
+export interface CalibrationView {
+  mode: Exclude<Phase['kind'], 'closed'>;
+  /** Perceptron checks this run (or, on the offer screen, is available). */
+  perceptron: boolean;
+  step: number;
+  steps: { title: string; use: string; state: StepState }[];
+  title: string;
+  use?: string;
+  instruction?: string;
+  /** Status line under the instruction. */
+  status?: string;
+  /** 0..1 progress for the bar (ready, countdown, recording). */
+  progress?: number;
+  /** Countdown number. */
+  count?: number;
+  ok?: boolean;
+  lines?: string[];
+  keys: [key: string, label: string][];
 }
 
 export interface StageDeps {
@@ -102,6 +141,7 @@ export class CalibrationStage {
   private readonly recorder: Pick<ClipRecorder, 'begin' | 'capture' | 'take'>;
   private stats: FrameStat[] = [];
   private confirmed: Partial<Record<CalibrationGesture, { ranges: Range[]; checked: boolean }>> = {};
+  private skipped = new Set<CalibrationGesture>();
   /** Notes about checks that couldn't run, for the summary. */
   private fallbacks = 0;
   /** Latest frame time; the stage runs on the frame clock. */
@@ -141,7 +181,10 @@ export class CalibrationStage {
     }
     if (p.kind === 'result' && !p.ok) {
       if (key === 'r') this.enterReady();
-      else if (key === 's') this.next(now);
+      else if (key === 's') {
+        this.skipped.add(STEPS[this.step]!.key);
+        this.next(now);
+      }
       return true;
     }
     if (p.kind === 'summary') {
@@ -171,7 +214,12 @@ export class CalibrationStage {
         break;
       case 'recording':
         this.recorder.capture(now);
-        if (hand) this.stats.push({ step: STEPS[this.step]!.key, t: now, grip: hand.grip.ratio, lift: hand.lift?.ratio ?? 2 });
+        if (hand) {
+          this.stats.push({
+            step: STEPS[this.step]!.key, t: now, grip: hand.grip.ratio, lift: hand.lift?.ratio ?? 2,
+            palm: !!hand.palm?.active, pinch: !!hand.pinch?.active, point: !!hand.twoUp?.active,
+          });
+        }
         if (now - p.since >= RECORD_MS) {
           this.deps.gestures.collect(null);
           void this.check(now);
@@ -218,6 +266,47 @@ export class CalibrationStage {
     }
   }
 
+  /** The card's content right now (null when closed). */
+  view(now: number): CalibrationView | null {
+    const p = this.phase;
+    if (p.kind === 'closed') return null;
+    const s = STEPS[this.step]!;
+    const steps = STEPS.map((d, i) => ({
+      title: d.title,
+      use: d.use,
+      state: (this.confirmed[d.key] ? 'done' : this.skipped.has(d.key) ? 'skipped' : p.kind !== 'offer' && p.kind !== 'summary' && i === this.step ? 'current' : 'todo') as StepState,
+    }));
+    const base = { perceptron: this.usePerceptron, step: this.step, steps, title: s.title, use: s.use, instruction: s.instruction };
+    switch (p.kind) {
+      case 'offer':
+        return {
+          mode: 'offer', perceptron: p.perceptron, step: 0, steps, title: 'Calibrate your gestures',
+          instruction: p.perceptron
+            ? 'About 45 s: five quick poses. Perceptron checks each one, so BeatDrop learns from good examples only.\nShort webcam clips, used once, never stored.'
+            : 'About 45 s: five quick poses, set up on this computer.',
+          keys: p.perceptron ? [['Y', 'with Perceptron'], ['L', 'locally'], ['N', 'skip']] : [['Y', 'calibrate'], ['N', 'skip']],
+        };
+      case 'ready':
+        return { ...base, mode: 'ready', status: p.handSince === null ? 'Show your hand to the camera…' : 'Hold it…',
+          progress: p.handSince === null ? 0 : Math.min(1, (now - p.handSince) / HAND_STEADY_MS), keys: [['Esc', 'cancel']] };
+      case 'countdown':
+        return { ...base, mode: 'countdown', status: 'Get ready…', count: Math.max(1, Math.ceil((COUNTDOWN_MS - (now - p.since)) / 800)),
+          progress: Math.min(1, (now - p.since) / COUNTDOWN_MS), keys: [['Esc', 'cancel']] };
+      case 'recording':
+        return { ...base, mode: 'recording', status: `Recording · ${Math.max(0, (RECORD_MS - (now - p.since)) / 1000).toFixed(1)} s`,
+          progress: Math.min(1, (now - p.since) / RECORD_MS), keys: [['Esc', 'cancel']] };
+      case 'checking':
+        return { ...base, mode: 'checking', status: `Perceptron Mk1.5 is finding when you showed ${s.noun}…`, keys: [['Esc', 'cancel']] };
+      case 'result':
+        // A failed demo shows just the finding: the instruction and keys are on the card already.
+        return { ...base, mode: 'result', ok: p.ok, lines: p.ok ? p.text.split('\n') : p.text.split('\n').slice(0, 1),
+          keys: p.ok ? [] : [['R', 'try again'], ['S', 'skip this gesture']] };
+      case 'summary':
+        return { ...base, mode: 'summary', title: 'Gestures calibrated', use: undefined, instruction: undefined, lines: p.lines,
+          keys: [['any key', 'start mixing']] };
+    }
+  }
+
   // ---------------------------------------------------------------------------
 
   private begin(perceptron: boolean): void {
@@ -226,6 +315,7 @@ export class CalibrationStage {
     this.step = 0;
     this.stats = [];
     this.confirmed = {};
+    this.skipped = new Set();
     this.fallbacks = 0;
     this.deps.gestures.collect(null);
     this.enterReady();
@@ -299,6 +389,12 @@ export class CalibrationStage {
     const liftLine = lift ? this.calibrateLift(lift.ranges) : null;
     lines.push(liftLine ?? 'Build/drop skipped  (kept the default lift threshold)');
 
+    // Live detector checks: of the moments Perceptron confirmed, how many BeatDrop caught.
+    if (open) lines.push(detectorLine('Scratch (open palm)', this.stats, 'open', open, (s) => s.palm, 'hold your palm flat, facing the camera'));
+    const { pinch, point } = this.confirmed;
+    lines.push(pinch ? detectorLine('Stem volume (pinch)', this.stats, 'pinch', pinch, (s) => s.pinch, 'press thumb and index together firmly') : 'Stem volume (pinch) skipped');
+    lines.push(point ? detectorLine('Crossfade (finger up)', this.stats, 'point', point, (s) => s.point, 'point straight up, the other fingers folded') : 'Crossfade (finger up) skipped');
+
     const checked = Object.values(this.confirmed).filter((c) => c?.checked).length;
     if (this.usePerceptron) {
       lines.push(this.fallbacks
@@ -350,6 +446,27 @@ export function liftThresholds(values: number[]): { on: number; off: number } {
   const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))]!;
   const on = Math.min(0.95, Math.max(0.35, p90 + 0.05));
   return { on: round2(on), off: round2(Math.min(1.3, on + 0.25)) };
+}
+
+/**
+ * A live-gesture check: of the demo frames Perceptron confirmed (or the whole demo when
+ * calibrating locally), the share BeatDrop's own detector caught.
+ */
+function detectorLine(
+  name: string,
+  stats: FrameStat[],
+  step: CalibrationGesture,
+  c: { ranges: Range[]; checked: boolean },
+  caught: (s: FrameStat) => boolean,
+  tip: string,
+): string {
+  const frames = stats.filter((s) => s.step === step && inRanges(c.ranges, s.t));
+  const of = c.checked ? 'of the moments Perceptron confirmed' : 'of your demo';
+  if (!frames.length) return `${name} ✓  ${c.checked ? 'Perceptron confirmed it' : 'recorded'} (no hand measurements)`;
+  const share = frames.filter(caught).length / frames.length;
+  return share >= DETECTOR_OK
+    ? `${name} ✓  BeatDrop caught ${pct(share)} ${of}`
+    : `${name} ⚠  BeatDrop caught only ${pct(share)} ${of}: ${tip}`;
 }
 
 /** How the default fist rule did on the confirmed demo frames (before calibration). */

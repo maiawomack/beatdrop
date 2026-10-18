@@ -12,7 +12,7 @@ on 127.0.0.1 only and handles one separation at a time (Demucs uses every CPU co
     GET  /tracks         -> index.json of every prepared track
     GET  /stems/<path>   -> prepared files (<track-id>/manifest.json, waveform.json, lyrics.json, *.wav)
     GET  /health         -> {"ok": true, "demucs": bool, "queued": int, "perceptron": bool}
-    POST /gesture/segments  {"gesture": "open"|"fist"|"lift", "frames": [{"t": ms, "jpeg": base64}, ...]}
+    POST /gesture/segments  {"gesture": "open"|"fist"|"lift"|"pinch"|"point", "frames": [{"t": ms, "jpeg": base64}, ...]}
          -> {"segments": [[start_s, end_s], ...], "summary"}  or 503 {"error"} if Perceptron is unavailable
          (Perceptron finds when a calibration demo shows the gesture; see tools/perceptron/gesture_check.py)
 

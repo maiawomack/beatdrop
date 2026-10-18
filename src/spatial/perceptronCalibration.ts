@@ -17,7 +17,7 @@ const FRAME_EVERY_MS = 200;
 const FRAME_WIDTH = 384;
 const REQUEST_TIMEOUT_MS = 45_000;
 
-export type CalibrationGesture = 'open' | 'fist' | 'lift';
+export type CalibrationGesture = 'open' | 'fist' | 'pinch' | 'point' | 'lift';
 
 /** A time range in performance.now() milliseconds. */
 export type Range = [start: number, end: number];

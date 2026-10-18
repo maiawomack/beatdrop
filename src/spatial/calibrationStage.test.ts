@@ -78,7 +78,7 @@ describe('gesture calibration stage', () => {
     key('y');
     // This user's fist (0.60) and lift (0.62) are looser than the defaults (0.55, 0.55).
     const userHand = () => (stage.phase.kind === 'recording' && /lift/i.test(stage.banner(0)?.title ?? '') ? hand(1, 0.62) : hand(0.6, 0.62));
-    await run(30_000, userHand); // 3 steps x ~8.6 s, before the summary times out
+    await run(46_000, userHand); // 5 steps x ~8.6 s, before the summary times out
     expect(stage.phase.kind).toBe('summary');
 
     // Grab model: only samples inside the confirmed 1.0-3.5 s window of each demo.
@@ -106,7 +106,7 @@ describe('gesture calibration stage', () => {
     expect(stage.banner(0)!.detail).toMatch(/Perceptron saw no fist in that demo/);
     key('r'); // retry
     await run(9_000, () => hand(0.4, 1.5));
-    expect(stage.banner(0)?.title).toMatch(/LIFT/);
+    expect(stage.banner(0)?.title).toMatch(/PINCH/);
   });
 
   it('falls back to the whole demo when Perceptron is unavailable', async () => {
@@ -114,10 +114,10 @@ describe('gesture calibration stage', () => {
     const { stage, deps, run, key } = setup();
     await stage.open();
     key('y');
-    await run(30_000, () => hand(0.4, 0.5));
+    await run(46_000, () => hand(0.4, 0.5));
     expect(stage.phase.kind).toBe('summary');
     expect(deps.saveGrab).toHaveBeenCalledOnce();
-    expect(stage.banner(0)!.detail).toMatch(/Perceptron checked 0 of 3 demos \(3 unavailable/);
+    expect(stage.banner(0)!.detail).toMatch(/Perceptron checked 0 of 5 demos \(5 unavailable/);
   });
 
   it('Esc while Perceptron is checking closes for good (a late answer is ignored)', async () => {
@@ -150,6 +150,53 @@ describe('gesture calibration stage', () => {
     expect(deps.onClose).toHaveBeenCalledOnce();
     expect(deps.saveGrab).not.toHaveBeenCalled();
     expect(deps.gestures.setLiftThresholds).not.toHaveBeenCalled();
+  });
+
+  it('checks the live gestures: of the moments Perceptron confirmed, how many BeatDrop caught', async () => {
+    mockService(() => ({ segments: [[1.0, 3.5]] }));
+    const { stage, run, key } = setup();
+    await stage.open();
+    key('y');
+    // Open palm and pinch are caught; the finger-up detector misses this user's pose.
+    const live = () => {
+      const t = stage.banner(0)?.title ?? '';
+      const h = hand(/FIST/.test(t) ? 0.4 : 1, /LIFT/.test(t) ? 0.5 : 1.5) as unknown as Record<string, unknown>;
+      return { ...h, palm: { active: /OPEN/.test(t) }, pinch: { active: /PINCH/.test(t) }, twoUp: { active: false } } as unknown as HandState;
+    };
+    await run(46_000, live);
+    expect(stage.phase.kind).toBe('summary');
+    const detail = stage.banner(0)!.detail;
+    expect(detail).toMatch(/Scratch \(open palm\) ✓  BeatDrop caught 100% of the moments Perceptron confirmed/);
+    expect(detail).toMatch(/Stem volume \(pinch\) ✓  BeatDrop caught 100%/);
+    expect(detail).toMatch(/Crossfade \(finger up\) ⚠  BeatDrop caught only 0% .*point straight up/);
+  });
+
+  it('the card view: five gestures with what each is for, and the step being checked', async () => {
+    let answer: (r: Response) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.endsWith('/health') ? new Response(JSON.stringify({ perceptron: true })) : new Promise<Response>((r) => (answer = r)),
+      ),
+    );
+    const { stage, run, key, time } = setup();
+    await stage.open();
+    const offer = stage.view(time())!;
+    expect(offer.mode).toBe('offer');
+    expect(offer.perceptron).toBe(true);
+    expect(offer.steps.map((s) => `${s.title}:${s.use}`)).toEqual(['OPEN PALM:scratch', 'FIST:tempo', 'PINCH:stem volume', 'FINGER UP:crossfade', 'LIFT:build & drop']);
+    expect(offer.keys.map(([k]) => k)).toEqual(['Y', 'L', 'N']);
+    key('y');
+    await run(8_000, () => hand(1, 1.5)); // OPEN demo recorded, Perceptron checking
+    const checking = stage.view(time())!;
+    expect(checking.mode).toBe('checking');
+    expect(checking.status).toMatch(/Perceptron Mk1\.5 is finding when you showed an open hand/);
+    expect(checking.steps[0]!.state).toBe('current');
+    answer(new Response(JSON.stringify({ segments: [[0.5, 3.5]], poses: [], summary: '' })));
+    await run(2_500, () => hand(1, 1.5));
+    const next = stage.view(time())!;
+    expect(next.steps[0]!.state).toBe('done');
+    expect(next.steps[1]!.state).toBe('current');
   });
 
   it('bounds personal lift thresholds', () => {

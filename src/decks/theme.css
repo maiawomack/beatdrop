@@ -908,6 +908,33 @@ kbd {
   transform: translate(50%, -50%);
 }
 
+/* A soft neon glow behind each record: teal for A, pink for B. */
+.vinyl::before {
+  content: '';
+  position: absolute;
+  inset: -16%;
+  border-radius: 50%;
+  z-index: -1;
+  /* The record covers the middle; the colour sits at its rim and fades outward. */
+  background: radial-gradient(circle closest-side, var(--neon) 72%, transparent 100%);
+  filter: blur(26px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.vinyl.left {
+  --neon: #2dffc8;
+}
+
+/* Teal-green reads dimmer than pink on the blue backdrop, so it glows a bit stronger. */
+.vinyl.left::before {
+  opacity: 0.68;
+}
+
+.vinyl.right {
+  --neon: #ff3fb4;
+}
+
 /* Beat pulse: JS sets the scale and --beat (0..1) every frame. */
 .vinyl .pulse {
   position: absolute;

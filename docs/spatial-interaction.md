@@ -101,10 +101,11 @@ Everyone grabs and lifts a little differently. The calibration stage personalize
 gestures with tunable thresholds, using **Perceptron AI** (DubHacks Perception track) to make
 sure BeatDrop only learns from demonstrations that actually show the gesture.
 
-It's offered once when you first click **Start session**, and opened any time with `C`.
+It opens every time you click **Start session** (`N` skips it), and any time with `C`.
 `Shift+C` resets everything to the defaults.
 
-1. **Demonstrate:** open hand, then fist, then the lift pose. Each one is about 4 s, after a
+1. **Demonstrate** five gestures, each with what BeatDrop uses it for: open palm (scratch), fist (tempo),
+   pinch (stem volume), finger up (crossfade), lift (build & drop). Each one is about 4 s, after a
    countdown that starts once a hand is steadily in view.
 2. **Perceptron finds the moments.** The demo goes to Perceptron's `perceptron-mk1.5` model as a
    short video (`video_frames`, 5 fps), and two capabilities are cross-checked:
@@ -120,7 +121,10 @@ It's offered once when you first click **Start session**, and opened any time wi
      confirmed open and fist samples.
    - **Build/drop:** a personal lift threshold, set just above the user's 90th-percentile
      fingertip bunch (bounded to 0.35–0.95, release 0.25 higher, like the default).
-5. **Before/after:** the summary reports how the defaults did on *your* confirmed demos. For
+5. **Live gesture checks** (pinch, finger up, open palm): of the moments Perceptron confirmed, how
+   often BeatDrop's own detector caught the gesture, e.g. *"Stem volume (pinch) ✓ BeatDrop caught 91%"*,
+   or ⚠ with a tip below 70%. These only report; nothing is changed.
+6. **Before/after:** the summary reports how the defaults did on *your* confirmed demos. For
    example, *"lift threshold 0.55 → 0.67: the default caught 0% of your lift frames, yours catches
    100%"*, or how often the default fist rule caught your fist and misfired on your open hand.
 
@@ -144,6 +148,7 @@ It's offered once when you first click **Start session**, and opened any time wi
 **Code:**
 - `tools/perceptron/gesture_check.py`: Perceptron calls and validation.
 - `src/spatial/calibrationStage.ts`: the stage, tested in `calibrationStage.test.ts`.
+- `src/spatial/calibrationCard.ts`: the on-screen card (Perceptron badge, step dots, progress and scanning bars, coloured results).
 - `src/spatial/perceptronCalibration.ts`: recording and the client.
 
 The browser console logs what Perceptron confirmed for each demo.

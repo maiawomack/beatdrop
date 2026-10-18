@@ -1,0 +1,77 @@
+/*
+ * Experiment: a swirling gradient in the backdrop (deck colours + neon teal / pink), only
+ * around the records and above the board, never through the middle board's glass.
+ * To undo, delete the `import './swirl.css'` line in main.tsx (or this file).
+ */
+@property --swirl-a {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.backdrop {
+  overflow: hidden;
+  /* Own layer, so the swirl stays above the backdrop colours but behind everything on it. */
+  isolation: isolate;
+}
+
+.backdrop::before,
+.backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1; /* behind the records, the console and the stage rig */
+  mix-blend-mode: screen;
+  filter: blur(60px);
+  /* The layer stays put (only its colours turn), so this mask keeps the middle clear:
+     the sides (records) and the strip above the board show the swirl. */
+  -webkit-mask-image:
+    linear-gradient(90deg, #000 12%, transparent 19%, transparent 81%, #000 88%),
+    linear-gradient(#000 8%, transparent 14%);
+  mask-image:
+    linear-gradient(90deg, #000 12%, transparent 19%, transparent 81%, #000 88%),
+    linear-gradient(#000 8%, transparent 14%);
+}
+
+.backdrop::before {
+  background: conic-gradient(
+    from var(--swirl-a) at 50% 50%,
+    var(--left),
+    #2dffc8,
+    transparent 30%,
+    #ff3fb4,
+    var(--right),
+    transparent 70%,
+    var(--left)
+  );
+  opacity: 0.4;
+  animation: swirl 6.7s linear infinite;
+}
+
+.backdrop::after {
+  background: conic-gradient(
+    from var(--swirl-a) at 50% 55%,
+    transparent,
+    rgba(45, 255, 200, 0.6) 12%,
+    transparent 28%,
+    transparent 50%,
+    rgba(255, 63, 180, 0.6) 62%,
+    transparent 78%
+  );
+  opacity: 0.4;
+  animation: swirl 4.7s linear infinite reverse;
+}
+
+@keyframes swirl {
+  to {
+    --swirl-a: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop::before,
+  .backdrop::after {
+    animation: none;
+  }
+}

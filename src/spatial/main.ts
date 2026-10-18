@@ -17,6 +17,7 @@ import { searchLibrary } from '../library/api';
 import { DECK_IDS, type AudioEngineState, type DeckId } from '../shared/types';
 import { createSearchBar } from '../ui/SearchBar';
 import { EngineHandle } from './engineHandle';
+import { drawCalibrationCard } from './calibrationCard';
 import { CalibrationStage } from './calibrationStage';
 import {
   GrabClassifier,
@@ -194,8 +195,6 @@ function saveGrabModel(c: GrabClassifier): void {
 
 /** Personal build/drop lift thresholds from gesture calibration (calibrationStage.ts). */
 const LIFT_KEY = 'beatdrop.liftThresholds.v1';
-/** Set once the calibration stage has been offered at session start (it stays on C after). */
-const OFFERED_KEY = 'beatdrop.calibrationOffered.v1';
 
 function loadLift(): { on: number; off: number } | null {
   try {
@@ -280,7 +279,7 @@ async function main(): Promise<void> {
   // spatial.html?recalibrate: forget saved calibration and offer it again at Start session.
   const params = new URLSearchParams(location.search);
   if (params.has('recalibrate')) {
-    for (const key of [MODEL_KEY, LIFT_KEY, OFFERED_KEY]) store(key, null);
+    for (const key of [MODEL_KEY, LIFT_KEY]) store(key, null);
     params.delete('recalibrate');
     history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`);
   }
@@ -313,7 +312,7 @@ async function main(): Promise<void> {
   );
   syncFromEngine(stems, audio, interaction);
   // Dev only: poke the session from the console (e.g. __beatdrop.engine.dispatch({ type: 'DROP' })).
-  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { engine, audio, interaction, stems } });
+  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { engine, audio, interaction, stems, calibration } });
   const drift = new DriftField(aspect0, GRAB_GESTURE);
   const waveSource = createTask1Waveforms(engine, audio);
   const waveforms = new WaveformRenderer(waveSource);
@@ -327,20 +326,9 @@ async function main(): Promise<void> {
     engine.resume();
     startButton.hidden = true;
     hint.hidden = true;
-    let offered = true;
-    try {
-      offered = localStorage.getItem(OFFERED_KEY) !== null;
-    } catch {
-      /* no storage: don't nag */
-    }
-    if (!offered) {
-      // First session on this browser: offer gesture calibration (skippable), then search.
-      store(OFFERED_KEY, '1');
-      searchAfterCalibration = true;
-      void calibration.open();
-    } else if (!DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) {
-      openSearch();
-    }
+    // Every session starts with the gesture calibration (Perceptron AI); N skips it.
+    searchAfterCalibration = true;
+    void calibration.open();
   });
 
   const togglePlay = (deck: DeckId) => {
@@ -383,7 +371,6 @@ async function main(): Promise<void> {
         }
         pipeline.gestures.setLiftThresholds(defaultLift);
         store(LIFT_KEY, null);
-        store(OFFERED_KEY, null); // offer calibration again at the next Start session
         calibDone = { at: performance.now(), text: 'Calibration cleared: default fist grip and lift. Press C to calibrate.' };
       } else {
         void calibration.open();
@@ -488,7 +475,9 @@ async function main(): Promise<void> {
     );
     neon.drawForeground(ctx, scene);
     if (lastFrame) drawHandOverlay(ctx, lastFrame, GRAB_GESTURE, interaction.handModes);
-    if (banner) drawBanner(banner.title, banner.detail);
+    const card = calibration.view(now);
+    if (card) drawCalibrationCard(ctx, card, now);
+    else if (banner) drawBanner(banner.title, banner.detail);
     if (recorder.recording) drawRecIndicator(recorder.seconds, recorder.label);
   };
   requestAnimationFrame(draw);
@@ -510,10 +499,8 @@ async function main(): Promise<void> {
 
     lastFrame = frame;
     calibration.update(frame);
-    const stageBanner = calibration.banner(frame.timestamp);
-    if (stageBanner) {
-      banner = stageBanner;
-    } else if (calibDone && frame.timestamp - calibDone.at < 2500) {
+    // The calibration card is drawn from calibration.view(); this banner is for notices only.
+    if (calibDone && frame.timestamp - calibDone.at < 2500) {
       banner = { title: calibDone.text, detail: '' };
     } else {
       banner = null;

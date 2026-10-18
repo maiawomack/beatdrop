@@ -34,6 +34,9 @@ GESTURES = {
     # In Mk1.5's own words for the pose; describing it as "upside down ... like holding a string"
     # made the video model mark the wrong part of the demo.
     "lift": "the hand is clenched with the fingers pointing downward and the fingertips touching each other",
+    # Checks for the live gestures (no thresholds): stem volume and crossfade.
+    "pinch": "the person's thumb tip and index fingertip are touching or nearly touching (a pinch, like an OK sign or gripping something small), held",
+    "point": "the person is pointing one or two fingers straight up (index, or index and middle) with the other fingers folded",
 }
 
 
@@ -63,7 +66,7 @@ def available() -> bool:
 
 
 #: Pose labels for the per-frame check, and which ones count for each demonstration.
-POSES = ["fist", "open_hand", "pinch", "pointing", "partly_closed", "lift", "no_hand", "other"]
+POSES = ["fist", "open_hand", "pinch", "pointing", "two_fingers", "partly_closed", "lift", "no_hand", "other"]
 ACCEPTED = {
     "fist": {"fist"},
     "open": {"open_hand", "pinch", "pointing", "partly_closed", "other"},  # anything that is not a grab
@@ -71,7 +74,14 @@ ACCEPTED = {
     # downward and the fingertips touching" and labels its frames "fist". So Perceptron confirms
     # a closed/bunched hand is held; MediaPipe checks the fingers point down (only those frames
     # count for the lift threshold). Asking Mk1.5 for the finger direction as JSON was unreliable.
-    "lift": {"lift", "fist", "pinch", "partly_closed"},
+    # BeatDrop's lift also counts with the fingers hanging straight down together (thumb anywhere);
+    # MediaPipe checks they point down, so a hand Mk1.5 calls open is fine here too.
+    "lift": {"lift", "fist", "pinch", "partly_closed", "open_hand"},
+    # A pinch with the other fingers out reads to Mk1.5 like an OK sign (often "open_hand"), and
+    # with them curled like a half-closed hand. This step only reports how BeatDrop's own pinch
+    # detector did (nothing is tuned from it), so accept those and let the video clip decide when.
+    "pinch": {"pinch", "partly_closed", "open_hand", "other", "pointing"},
+    "point": {"pointing", "two_fingers"},
 }
 POSE_SCHEMA = {
     "type": "object",
@@ -92,7 +102,8 @@ POSE_SCHEMA = {
 POSE_PROMPT = (
     "Each numbered frame is a webcam image of a person's hand. For every frame, classify the most prominent "
     "hand: fist (all fingers curled into the palm), open_hand (fingers extended or relaxed), pinch (thumb and "
-    "index fingertips touching), pointing (index extended, others curled), partly_closed (fingers half curled, "
+    "index fingertips touching), pointing (index extended, others curled), two_fingers (index and middle "
+    "extended in a V, others curled), partly_closed (fingers half curled, "
     "not a fist), lift (hand upside down with the thumb, index and middle fingertips bunched together pointing "
     "down), no_hand (no hand clearly visible), or other. Answer for every frame index."
 )
