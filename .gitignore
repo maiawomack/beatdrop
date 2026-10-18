@@ -9,9 +9,5 @@ dist/
 .venv-demucs/
 __pycache__/
 
-# Purchased music is licensed to you personally — never commit it
-mp3/*
-!mp3/.gitkeep
-
 # Generated stems (large, often copyrighted) -- regenerate with tools/stems/prepare_stems.py
 /public/stems/
