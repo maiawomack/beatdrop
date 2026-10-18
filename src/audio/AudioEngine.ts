@@ -10,7 +10,7 @@ import {
   type StemId,
 } from '../shared/types';
 import { loadTrack as loadStems } from '../stems';
-import { DeckChannel, clamp } from './DeckChannel';
+import { DeckChannel, clamp, loadScrubProcessor } from './DeckChannel';
 import { estimateTempo } from './tempo';
 
 /** Build-up: master high-pass sweep range (Hz). */
@@ -84,6 +84,8 @@ export class AudioEngine {
     this.riserGain = this.ctx.createGain();
     this.riserGain.gain.value = 0;
     this.riserBand.connect(this.riserGain).connect(this.buildHpf);
+    // Scratching needs a small audio processor; load it up front so the first scratch is instant.
+    void loadScrubProcessor(this.ctx);
 
     this.channels = {
       A: new DeckChannel(this.ctx, this.master),
@@ -131,7 +133,10 @@ export class AudioEngine {
 
   /** Live playhead position in seconds — cheap enough to call every animation frame. */
   getPositionSec(deck: DeckId): number {
-    return this.channels[deck].position();
+    // While a hand is on the record, the playhead is where the scratch is (what you hear);
+    // the song keeps running underneath and the playhead returns there on release.
+    const ch = this.channels[deck];
+    return ch.scratchPosition() ?? ch.position();
   }
 
   /** Live output level per stem, 0..1, for meters (all zero while paused). */
@@ -278,6 +283,23 @@ export class AudioEngine {
       }
       case 'DROP':
         this.drop();
+        break;
+      case 'SCRATCH_START': {
+        const deck = this.state.decks[cmd.deck];
+        if (deck.status !== 'ready' || deck.scratching) return;
+        void this.resume();
+        if (!this.channels[cmd.deck].startScratch()) return;
+        deck.scratching = true;
+        break;
+      }
+      case 'SCRATCH_MOVE':
+        // Streams at gesture rate: no state change, so no broadcast.
+        this.channels[cmd.deck].moveScratch(cmd.offsetSec);
+        return;
+      case 'SCRATCH_END':
+        if (!this.state.decks[cmd.deck].scratching) return;
+        this.channels[cmd.deck].endScratch();
+        this.state.decks[cmd.deck].scratching = false;
         break;
       case 'SET_CROSSFADER':
         this.state.mixer.crossfader = clamp(cmd.value, -1, 1);
@@ -608,6 +630,7 @@ function emptyDeck(id: DeckId): DeckState {
     bpmSource: null,
     channelFilter: {},
     clips: {},
+    scratching: false,
   };
 }
 

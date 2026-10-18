@@ -59,3 +59,99 @@ describe('lift pose (fingertips bunched, pointing down)', () => {
     expect(run(p, makeHand({ down: true, bunched: false }), 6, 0).last.lift?.active).toBe(false);
   });
 });
+
+describe('open palm', () => {
+  it('an open, upright hand is a palm; the lift pose and a fist are not', () => {
+    const p = new GestureProcessor(1);
+    const open = run(p, makeHand({ down: false, bunched: false }), 6, 0).last;
+    expect(open.palm?.active).toBe(true);
+    expect(open.lift?.active).toBe(false);
+
+    const q = new GestureProcessor(1);
+    const lift = run(q, makeHand({ down: true, bunched: true }), 6, 0).last;
+    expect(lift.lift?.active).toBe(true);
+    expect(lift.palm?.active).toBe(false);
+
+    // Fist: fingertips folded onto the palm.
+    const fist = makeHand({ down: false, bunched: false });
+    for (const tip of [8, 12, 16, 20]) fist.landmarks[tip] = { x: 0.5, y: 0.54, z: 0 }; // on the palm center
+    fist.worldLandmarks = fist.landmarks.map((l) => ({ ...l }));
+    const r = new GestureProcessor(1);
+    expect(run(r, fist, 6, 0).last.palm?.active).toBe(false);
+  });
+});
+
+describe('palm facing the camera', () => {
+  it('an upright hand facing the camera faces it; lying flat or hanging down does not', () => {
+    const upright = makeHand({ down: false, bunched: false });
+    expect(run(new GestureProcessor(1), upright, 4, 0).last.facing).toBe(true);
+    const flat = makeHand({ down: false, bunched: false });
+    flat.worldLandmarks = flat.landmarks.map((l) => ({ x: l.x, y: 0.5, z: l.y }));
+    const f = run(new GestureProcessor(1), flat, 4, 0).last;
+    expect(f.facing).toBe(false);
+    expect(f.flat).toBe(true);
+    const hanging = makeHand({ down: true, bunched: false });
+    expect(run(new GestureProcessor(1), hanging, 4, 0).last.facing).toBe(false);
+  });
+});
+
+describe('two fingers up (✌)', () => {
+  /** Upright hand with index + middle straight up, ring + pinky folded onto the palm. */
+  function vSign(): RawHand {
+    const h = makeHand({ down: false, bunched: false });
+    for (const tip of [16, 20]) {
+      h.landmarks[tip] = { x: h.landmarks[tip - 3]!.x, y: 0.55, z: 0 };
+      h.landmarks[tip - 1] = { x: h.landmarks[tip - 3]!.x, y: 0.5, z: 0 };
+    }
+    h.landmarks[4] = { x: 0.5, y: 0.5, z: 0 }; // thumb tucked
+    h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
+    return h;
+  }
+
+  it('index and middle up with the others curled is a ✌', () => {
+    const p = new GestureProcessor(1);
+    const last = run(p, vSign(), 6, 0).last;
+    expect(last.twoUp?.active).toBe(true);
+    expect(last.pinch.active).toBe(false);
+  });
+
+  it('an open hand, a fist, and a downward V are not', () => {
+    expect(run(new GestureProcessor(1), makeHand({ down: false, bunched: false }), 6, 0).last.twoUp?.active).toBe(false);
+    const fist = makeHand({ down: false, bunched: false });
+    for (const tip of [8, 12, 16, 20]) fist.landmarks[tip] = { x: 0.5, y: 0.54, z: 0 };
+    fist.worldLandmarks = fist.landmarks.map((l) => ({ ...l }));
+    expect(run(new GestureProcessor(1), fist, 6, 0).last.twoUp?.active).toBe(false);
+    const down = vSign();
+    for (const l of [...down.landmarks, ...down.worldLandmarks]) l.y = 1 - l.y; // flip upside down
+    expect(run(new GestureProcessor(1), down, 6, 0).last.twoUp?.active).toBe(false);
+  });
+});
+
+describe('one finger up (☝) also counts', () => {
+  it('index up, the rest curled', () => {
+    const h = makeHand({ down: false, bunched: false });
+    for (const tip of [12, 16, 20]) {
+      h.landmarks[tip] = { x: h.landmarks[tip - 3]!.x, y: 0.55, z: 0 };
+      h.landmarks[tip - 1] = { x: h.landmarks[tip - 3]!.x, y: 0.5, z: 0 };
+    }
+    h.landmarks[4] = { x: 0.5, y: 0.5, z: 0 };
+    h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
+    expect(run(new GestureProcessor(1), h, 6, 0).last.twoUp?.active).toBe(true);
+  });
+});
+
+describe('open palm with fingers together', () => {
+  it('still counts as an open palm facing the camera', () => {
+    const h = makeHand({ down: false, bunched: false });
+    // Fingers side by side (not spread), thumb out to the side.
+    [8, 12, 16, 20].forEach((tip, k) => {
+      const x = 0.485 + k * 0.012;
+      for (const j of [tip, tip - 1, tip - 2]) h.landmarks[j] = { ...h.landmarks[j]!, x };
+    });
+    h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
+    const last = run(new GestureProcessor(1), h, 6, 0).last;
+    expect(last.palm?.active).toBe(true);
+    expect(last.facing).toBe(true);
+    expect(last.twoUp?.active).toBe(false);
+  });
+});

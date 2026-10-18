@@ -59,16 +59,14 @@ describe('InteractionController + stem audio bridge', () => {
     expect(drums.holders).toHaveLength(0);
   });
 
-  it('a quick pinch-tap toggles mute and leaves the stem in place', () => {
+  it('a quick tap leaves the stem in place and does not mute (mute removed for now)', () => {
     const vocals = rig.stem('vocals');
     const start = { ...vocals.position };
     rig.pinchDrag('Left', [start]);
-    expect(rig.engine.stems.get('vocals')!.muted).toBe(true);
-    expect(vocals.position).toEqual(start);
-
-    rig.t += 500;
-    rig.pinchDrag('Left', [start]);
+    expect(rig.eventsOf('tap')).toHaveLength(1);
     expect(rig.engine.stems.get('vocals')!.muted).toBe(false);
+    expect(rig.commands('setMute')).toHaveLength(0);
+    expect(vocals.position).toEqual(start);
   });
 
   it('a slow hold without moving is not a tap', () => {

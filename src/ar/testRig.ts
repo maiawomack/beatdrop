@@ -58,7 +58,7 @@ export class Rig {
       obj.audio = stemView(s);
       if (!obj.stretch) obj.stretchAmount = s.fx;
     }
-    this.controller.perfView = { dropPending: this.engine.perf.dropPending };
+    this.controller.perfView = { dropPending: this.engine.perf.dropPending, crossfader: this.engine.perf.crossfader, tempo: this.engine.perf.tempo };
     const frame: PerceptionFrame = { timestamp: this.t, hands };
     this.controller.update(frame);
     this.t += FRAME_MS;

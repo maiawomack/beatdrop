@@ -23,6 +23,10 @@ export interface GestureConfig {
   grip: ThresholdConfig;
   /** Lift pose: ratio = fingertip bunch (thumb/index/middle spread / palm length) while pointing down. */
   lift: ThresholdConfig;
+  /** Open palm: ratio = 2 - grip ratio, so a wide-open hand is low (engaged) and a fist is high. */
+  palm: ThresholdConfig;
+  /** Two fingers up: ratio = 0.5 + how far the pose is from the V shape (below 0.5 = clearly a V). */
+  twoUp: ThresholdConfig;
   /** If true, a pinch also counts as a grab (otherwise only a closed-hand grip does). */
   grabIncludesPinch: boolean;
   /** Consecutive frames below `on` required to engage. */
@@ -44,6 +48,10 @@ export const DEFAULT_GESTURE_CONFIG: GestureConfig = {
   pinch: { on: 0.3, off: 0.45, open: 0.9, release: 0.1 },
   grip: { on: 0.55, off: 0.65, open: 1.0, release: 0.1 },
   lift: { on: 0.55, off: 0.8, open: 1.2, release: 0.3 },
+  // Open hand ~1.3 grip ratio (0.7 here), fingers together ~1.15, relaxed ~1.0, fist ~0.45:
+  // engage above 1.0, let go below 0.85. No relative release: moving the hand shouldn't drop it.
+  palm: { on: 1.0, off: 1.15, open: 1.5, release: 1 },
+  twoUp: { on: 0.5, off: 0.68, open: 1.2, release: 1 },
   grabIncludesPinch: false,
   startFrames: 2,
   lostGraceMs: 150,
@@ -70,6 +78,13 @@ const LIFT_DOWN_OFF = 0.2;
 const NOT_LIFT = 1.5;
 /** Fingertips bunched for the lift pose. */
 const LIFT_TIPS = [LM.THUMB_TIP, LM.INDEX_TIP, LM.MIDDLE_TIP] as const;
+/** Palm-down flatness (|vertical component of the palm normal|): engage above ON, stay until below OFF. */
+const FLAT_ON = 0.7;
+const FLAT_OFF = 0.5;
+/** Palm facing the camera (|camera-axis component of the palm normal|; 3D depth is noisy, so be lenient). */
+const FACING_ON = 0.45;
+const FACING_OFF = 0.3;
+
 /** EMA weight for the roll direction. */
 const ROLL_ALPHA = 0.5;
 /** Knuckles used for the drag anchor. */
@@ -175,6 +190,16 @@ interface Track {
   /** Learned grab detector (ratio = 1 - classifier score). Used once calibrated. */
   learned: GestureDetector;
   lift: GestureDetector;
+  palm: GestureDetector;
+  twoUp: GestureDetector;
+  /** Palm lying flat (palm down), with hysteresis. */
+  flat: boolean;
+  /** Palm facing the camera, with hysteresis, and the raw amount. */
+  facing: boolean;
+  facingAmount: number;
+  fingersDown: boolean;
+  /** Smoothed apparent palm size (view-height units). */
+  scale: number | null;
   /** Smoothed unit vector wrist -> middle knuckle, for roll. */
   rollVec: Point2 | null;
 }
@@ -258,15 +283,15 @@ export class GestureProcessor {
 
     for (const [id, track] of this.tracks) {
       if (seen.has(id)) continue;
-      const engaged = track.pinch.active || track.grip.active || track.learned.active || track.lift.active;
+      const engaged = track.pinch.active || track.grip.active || track.learned.active || track.lift.active || track.palm.active || track.twoUp.active;
       const grace = engaged ? this.cfg.heldGraceMs : this.cfg.lostGraceMs;
       if (t - track.lastSeen <= grace) {
         // Briefly lost: hold last state so a dropped frame doesn't drop a grab.
-        out.push(this.snapshot(track, false, track.pinch.heldPhase(), track.grip.heldPhase(), track.learned.heldPhase(), track.lift.heldPhase()));
+        out.push(this.snapshot(track, false, track.pinch.heldPhase(), track.grip.heldPhase(), track.learned.heldPhase(), track.lift.heldPhase(), track.palm.heldPhase(), track.twoUp.heldPhase()));
       } else {
         if (engaged) {
           const end = (d: GestureDetector): GesturePhase => (d.active ? 'end' : 'idle');
-          out.push(this.snapshot(track, false, end(track.pinch), end(track.grip), end(track.learned), end(track.lift)));
+          out.push(this.snapshot(track, false, end(track.pinch), end(track.grip), end(track.learned), end(track.lift), end(track.palm), end(track.twoUp)));
         }
         this.tracks.delete(id);
       }
@@ -324,6 +349,13 @@ export class GestureProcessor {
       grabBy: null,
       learned: new GestureDetector(LEARNED_THRESHOLDS, this.cfg),
       lift: new GestureDetector(this.cfg.lift, this.cfg),
+      palm: new GestureDetector(this.cfg.palm, this.cfg),
+      twoUp: new GestureDetector(this.cfg.twoUp, this.cfg),
+      flat: false,
+      facing: false,
+      facingAmount: 0,
+      fingersDown: false,
+      scale: null,
       rollVec: null,
     };
     this.tracks.set(id, track);
@@ -369,8 +401,28 @@ export class GestureProcessor {
     }
 
     const liftPhase = track.lift.update(this.liftRatio(lms, world, track.lift.active), mean(lms, LIFT_TIPS), t);
+    // An open palm is never a lift (bunched fingertips) or a grab.
+    const palmRatio = track.lift.active ? 2 : 2 - gripRatio(world);
+    const palmPhase = track.palm.update(palmRatio, mean(lms, PALM_POINTS), t);
+    const twoUpPhase = track.twoUp.update(this.twoUpRatio(lms, world), { ...lms[LM.INDEX_TIP] }, t);
+    const n = palmNormal(world);
+    track.flat = Math.abs(n.y) > (track.flat ? FLAT_OFF : FLAT_ON);
+    // Facing the camera: normal along the camera axis, and fingers not hanging down the image.
+    const knuckles = lms[LM.MIDDLE_MCP];
+    const wrist = lms[LM.WRIST];
+    const fingersDown = knuckles.y - wrist.y > 0.3 * Math.hypot((knuckles.x - wrist.x) * this.aspect, knuckles.y - wrist.y);
+    track.facingAmount = Math.abs(n.z);
+    track.fingersDown = fingersDown;
+    track.facing = !fingersDown && track.facingAmount > (track.facing ? FACING_OFF : FACING_ON);
+    // Palm size in the image: knuckle span and wrist-to-middle-knuckle, whichever is larger
+    // (one of them foreshortens as the hand turns).
+    const size = Math.max(
+      aspectDistance(lms[LM.INDEX_MCP], lms[LM.PINKY_MCP], this.aspect),
+      aspectDistance(lms[LM.WRIST], lms[LM.MIDDLE_MCP], this.aspect),
+    );
+    track.scale = track.scale === null ? size : track.scale + (size - track.scale) * 0.5;
 
-    return this.snapshot(track, true, pinchPhase, gripPhase, learnedPhase, liftPhase);
+    return this.snapshot(track, true, pinchPhase, gripPhase, learnedPhase, liftPhase, palmPhase, twoUpPhase);
   }
 
   /**
@@ -394,6 +446,37 @@ export class GestureProcessor {
       for (let j = i + 1; j < LIFT_TIPS.length; j++) spread = Math.max(spread, dist3(pts[LIFT_TIPS[i]], pts[LIFT_TIPS[j]]));
     }
     return spread / palm;
+  }
+
+  /**
+   * How far the hand is from "fingers up" (one or two: ☝ or ✌), forgivingly:
+   * 0.5 + the worst of
+   *  - index not extended enough (tip-to-wrist vs knuckle-to-wrist, 3D)
+   *  - ring / pinky not mostly curled
+   *  - the index not pointing roughly up the image
+   * The middle finger can be up or down. A clear pose is below 0.5; any
+   * broken condition pushes it above.
+   */
+  private twoUpRatio(lms: Landmark[], world: Landmark[]): number {
+    const pts = world.length >= 21 ? world : lms;
+    const ext = (tip: number, mcp: number) => {
+      const d = dist3(pts[mcp], pts[LM.WRIST]);
+      return d > 1e-6 ? dist3(pts[tip], pts[LM.WRIST]) / d : 1;
+    };
+    const index = ext(LM.INDEX_TIP, LM.INDEX_MCP);
+    const ring = ext(LM.RING_TIP, LM.RING_MCP);
+    const pinky = ext(LM.PINKY_TIP, LM.PINKY_MCP);
+    // Pointing up: index knuckle -> fingertip direction in the image (y down).
+    const base = lms[LM.INDEX_MCP];
+    const tip = lms[LM.INDEX_TIP];
+    const dx = (tip.x - base.x) * this.aspect;
+    const dy = tip.y - base.y;
+    const len = Math.hypot(dx, dy);
+    const up = len > 1e-6 ? -dy / len : 0; // 1 = straight up
+    // Ring and pinky: the more curled of the two only has to be clearly curled, the other mostly.
+    const curl = Math.max(Math.min(ring, pinky) - 1.35, Math.max(ring, pinky) - 1.55);
+    const worst = Math.max(1.45 - index, curl, 0.25 - up);
+    return 0.5 + worst;
   }
 
   /** Thumb-index tip gap / index finger length, in the 2D image. */
@@ -426,10 +509,14 @@ export class GestureProcessor {
     grip: GesturePhase,
     learnedPhase: GesturePhase,
     liftPhase: GesturePhase,
+    palmPhase: GesturePhase,
+    twoUpPhase: GesturePhase,
   ): HandState {
     const p = track.pinch.state(pinch);
     const g = track.grip.state(grip);
     const lift = track.lift.state(liftPhase);
+    const palm = track.palm.state(palmPhase);
+    const twoUp = track.twoUp.state(twoUpPhase);
 
     // Calibrated: the learned classifier alone decides the grab (aimed from
     // the fingertips, like before).
@@ -444,7 +531,7 @@ export class GestureProcessor {
         ratio: l.ratio,
         strength: l.active ? 1 : clamp01((1 - l.ratio) / (1 - LEARNED_THRESHOLDS.on)),
       };
-      return { id: track.id, tracked, confidence: track.confidence, landmarks: track.landmarks, anchor: { ...track.anchor.value }, pinch: p, grip: g, grab, lift, roll: rollOf(track) };
+      return { id: track.id, tracked, confidence: track.confidence, landmarks: track.landmarks, anchor: { ...track.anchor.value }, pinch: p, grip: g, grab, lift, palm, twoUp, flat: track.flat, facing: track.facing, facingAmount: track.facingAmount, fingersDown: track.fingersDown, scale: track.scale ?? undefined, roll: rollOf(track) };
     }
 
     // Only a closed fist grabs by default (pincers were confusing to use);
@@ -482,9 +569,32 @@ export class GestureProcessor {
       grip: g,
       grab,
       lift,
+      palm,
+      twoUp,
+      flat: track.flat,
+      facing: track.facing,
+      facingAmount: track.facingAmount,
+      fingersDown: track.fingersDown,
+      scale: track.scale ?? undefined,
       roll: rollOf(track),
     };
   }
+}
+
+/**
+ * Unit palm normal from metric 3D landmarks (x right, y down, z depth):
+ * |y| ~1 = hand lying flat, |z| ~1 = palm (or back of the hand) facing the camera.
+ */
+function palmNormal(world: Landmark[]): { x: number; y: number; z: number } {
+  if (world.length < 21) return { x: 0, y: 0, z: 0 };
+  const w = world[LM.WRIST];
+  const a = world[LM.INDEX_MCP];
+  const b = world[LM.PINKY_MCP];
+  const u = { x: a.x - w.x, y: a.y - w.y, z: a.z - w.z };
+  const v = { x: b.x - w.x, y: b.y - w.y, z: b.z - w.z };
+  const n = { x: u.y * v.z - u.z * v.y, y: u.z * v.x - u.x * v.z, z: u.x * v.y - u.y * v.x };
+  const len = Math.hypot(n.x, n.y, n.z);
+  return len > 1e-9 ? { x: n.x / len, y: n.y / len, z: n.z / len } : { x: 0, y: 0, z: 0 };
 }
 
 function rollOf(track: Track): number | undefined {

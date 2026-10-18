@@ -3,41 +3,96 @@ import { parseId } from '../bridge/task1Adapter';
 import type { Point2 } from '../perception';
 import { DECK_COLORS, STEM_COLORS, STEM_LABELS } from '../decks/theme';
 import type { ChannelKey, DeckId } from '../shared/types';
-import { createHoloObject, type HoloObjectInit } from './HoloObject';
+import { createHoloObject, type CrossfadeZone, type HoloObjectInit, type Platter, type TempoStrip } from './HoloObject';
 import type { InteractionController } from './InteractionController';
 
 /**
  * Deck-aware layout for the shared two-deck engine, mirroring the decks
- * screen (Monitor 1): each deck's stems stand as vertical bars side by side,
- * in the same order and the same colors as its stem faders. Deck A on the
- * left, deck B on the right, center left clear for you.
+ * screen (Monitor 1): each deck's stems are fader bars standing on the
+ * bottom edge, side by side, in the same order and colors as its stem
+ * faders. Deck A on the left, deck B on the right, center left clear for you.
  */
 
 const CHANNEL_ORDER: ChannelKey[] = ['vocals', 'drums', 'bass', 'instrumental', 'full'];
 const EDGE_MARGIN = 0.04;
-/** Bar size and spacing, view-height units. */
-const BAR_HALF = { x: 0.05, y: 0.16 };
-const FULL_HALF = { x: 0.06, y: 0.19 };
-const BAR_PITCH = 0.135;
-const BARS_Y = 0.52;
+/** Fader tracks stand on the bottom edge: size, spacing and bottom margin, view-height units. */
+const BAR_HALF = { x: 0.05, y: 0.28 };
+const FULL_HALF = { x: 0.065, y: 0.28 };
+const BAR_PITCH = 0.165;
+const BOTTOM_MARGIN = 0.035;
 
 /** Colors shared with the decks screen: stems keep one color everywhere; a full mix takes its deck's color. */
 export function channelColor(deck: DeckId, channel: ChannelKey): string {
   return channel === 'full' ? DECK_COLORS[deck] : STEM_COLORS[channel];
 }
 
+/** Width (view-height units) the full layout needs: two decks of four bars and a gap for the crossfader. */
+const LAYOUT_WIDTH = 2 * (EDGE_MARGIN + 4 * BAR_PITCH) + 0.25;
+
+/** Shrinks bars, records and spacing sideways on narrow (e.g. portrait) frames so both decks fit. */
+export function layoutScale(aspect: number): number {
+  return Math.min(1, aspect / LAYOUT_WIDTH);
+}
+
 /** Where a deck channel's bar stands. Bars run left to right in the decks screen's order on both sides. */
 export function deckSlot(aspect: number, deck: DeckId, index: number, count: number): { position: Point2; halfSize: Point2 } {
+  const k = layoutScale(aspect);
   const half = count > 1 ? BAR_HALF : FULL_HALF;
-  const fromEdge = EDGE_MARGIN + BAR_PITCH / 2 + (deck === 'A' ? index : count - 1 - index) * BAR_PITCH;
+  const fromEdge = k * (EDGE_MARGIN + BAR_PITCH / 2 + (deck === 'A' ? index : count - 1 - index) * BAR_PITCH);
   const x = deck === 'A' ? fromEdge / aspect : 1 - fromEdge / aspect;
-  return { position: { x, y: BARS_Y }, halfSize: { ...half } };
+  return { position: { x, y: 1 - BOTTOM_MARGIN - half.y }, halfSize: { x: half.x * k, y: half.y } };
 }
 
 /** Label shown on a deck channel: `A · VOCALS`, or the song title for a full mix. */
 export function channelLabel(deck: DeckId, channel: ChannelKey, title?: string | null): string {
   const name = channel === 'full' ? (title ? truncate(title, 14) : 'Song') : STEM_LABELS[channel];
   return `${deck} · ${name}`;
+}
+
+/** Record size and height, view-height units / view space. */
+const PLATTER_RADIUS = 0.085;
+const PLATTER_Y = 0.2;
+
+/** The record above a deck's bars (scratch with an open palm). */
+export function deckPlatter(aspect: number, deck: DeckId, barCount: number): Platter {
+  const k = layoutScale(aspect);
+  const fromEdge = k * (EDGE_MARGIN + (Math.max(1, barCount) * BAR_PITCH) / 2);
+  const x = deck === 'A' ? fromEdge / aspect : 1 - fromEdge / aspect;
+  const radius = PLATTER_RADIUS * Math.max(0.7, k);
+  return { deck, position: { x, y: PLATTER_Y }, radius, color: DECK_COLORS[deck], hover: 0, hand: null, offsetSec: 0 };
+}
+
+/** The open-palm crossfader zone: the space between the two decks' bars. */
+export function crossfadeZone(aspect: number): CrossfadeZone {
+  const x0 = (layoutScale(aspect) * (EDGE_MARGIN + 4 * BAR_PITCH) + 0.02) / aspect;
+  return { x0, x1: 1 - x0, y0: 0.35, y1: 1, arming: 0, hand: null };
+}
+
+/** Keep one record per loaded deck (same objects while loaded, so a scratch in progress isn't lost). */
+export function syncPlatters(engine: AudioStateSource, interaction: InteractionController, aspect: number): void {
+  const ids = [...engine.stems.entries()].filter(([, s]) => !s.clipOf).map(([id]) => id);
+  const next: Platter[] = [];
+  for (const deck of ['A', 'B'] as DeckId[]) {
+    const count = sortedChannels(ids, deck).length;
+    if (count === 0) continue;
+    const existing = interaction.platters.find((p) => p.deck === deck);
+    const fresh = deckPlatter(aspect, deck, count);
+    if (existing) {
+      existing.position = fresh.position;
+      existing.radius = fresh.radius;
+      next.push(existing);
+    } else next.push(fresh);
+  }
+  interaction.platters = next;
+  // A tempo strip beside each record, on the side toward the middle of the screen.
+  interaction.tempoStrips = next.map((pl) => {
+    const existing = interaction.tempoStrips.find((s) => s.deck === pl.deck);
+    const dir = pl.deck === 'A' ? 1 : -1;
+    const position = { x: pl.position.x + (dir * (pl.radius + 0.05)) / aspect, y: pl.position.y };
+    const halfHeight = pl.radius * 1.05;
+    if (existing) return Object.assign(existing, { position, halfHeight });
+    return { deck: pl.deck, position, halfHeight, color: pl.color, hover: 0, hand: null, value: null } satisfies TempoStrip;
+  });
 }
 
 /** Default positions of every deck channel currently shown, for "reset layout". */
@@ -72,11 +127,14 @@ export function syncDeckStems(
       const id = `${deck}:${ch}`;
       const existing = interaction.objects.find((o) => o.id === id);
       const label = channelLabel(deck, ch, titleOf(deck));
+      const slot = deckSlot(aspect, deck, i, chans.length);
       if (existing) {
+        // Bars never move by hand, so keep them on their slot (the frame may have changed shape).
         existing.label = label;
+        existing.position = slot.position;
+        existing.halfSize = slot.halfSize;
         return;
       }
-      const slot = deckSlot(aspect, deck, i, chans.length);
       const init: HoloObjectInit = { id, label, color: channelColor(deck, ch), ...slot };
       const obj = createHoloObject(init);
       // Deck stems stand in place like the decks screen's faders: grab + move up/down = volume.
