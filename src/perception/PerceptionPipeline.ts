@@ -24,7 +24,8 @@ export class PerceptionPipeline {
     readonly video: HTMLVideoElement,
     private stream: MediaStream,
     private tracker: HandTracker,
-    private gestures: GestureProcessor,
+    /** Gesture stage; exposed for grab calibration. */
+    readonly gestures: GestureProcessor,
   ) {}
 
   static async create(video: HTMLVideoElement, opts: PerceptionOptions = {}): Promise<PerceptionPipeline> {

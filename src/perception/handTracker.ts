@@ -8,11 +8,12 @@ const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 /**
- * MediaPipe labels handedness assuming a mirrored (selfie) image. We feed it
- * the raw, unmirrored webcam frame, so its labels are swapped relative to the
- * user's real hands. Flip this if the debug overlay shows the wrong label.
+ * MediaPipe's docs say labels assume a mirrored (selfie) image, but a real
+ * recording (2026-10-17) showed its labels already match the user's hands on
+ * the raw webcam frame: with swapping on, "Left" sat on the user's right hand.
+ * Flip this if the L/R badges are on the wrong hands.
  */
-const SWAP_HANDEDNESS = true;
+const SWAP_HANDEDNESS = false;
 
 export class HandTracker {
   private constructor(private landmarker: HandLandmarker) {}

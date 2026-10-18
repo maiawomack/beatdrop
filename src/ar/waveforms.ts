@@ -16,6 +16,30 @@ export interface WaveformSource {
   playhead?(stemId: string): number;
   /** Live output level in [0, 1], used to pulse the glow with the music. */
   level?(stemId: string): number;
+  /**
+   * Current tempo and position within the beat (phase 0..1, 0 = on the beat),
+   * or null if unknown. Drives beat-synced pulses; the audio engine (Task 1)
+   * should report this from the track's beat grid.
+   */
+  beat?(): { bpm: number; phase: number } | null;
+  /**
+   * The stem's loop as seen in the visible window, from the engine's actual
+   * playback: `marks` are loop-boundary positions across the window (0..1),
+   * `region` the span the current pass covers, `progress` 0..1 through it.
+   * Null when the stem isn't looping.
+   */
+  loop?(stemId: string): LoopView | null;
+  /** Seconds of audio the window spans (for previewing loop lengths). */
+  windowSeconds?(): number;
+}
+
+export interface LoopView {
+  beats: number;
+  /** False while waiting for the beat where the loop engages. */
+  engaged: boolean;
+  marks: number[];
+  region: [number, number];
+  progress: number;
 }
 
 type Shape = (u: number) => number;

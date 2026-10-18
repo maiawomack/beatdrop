@@ -18,19 +18,21 @@
              background: rgba(6, 10, 22, .45); border: 1px solid rgba(120, 180, 255, .18);
              padding: 8px 12px; border-radius: 10px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
       #hud.hidden { display: none; }
-      /* Soft vignette + faint scanlines for a holographic workstation feel. */
+      /* Soft vignette to frame the scene. */
       #fx { position: absolute; inset: 0; pointer-events: none; z-index: 1;
-            background:
-              radial-gradient(ellipse at center, transparent 55%, rgba(2, 4, 14, .55) 100%),
-              repeating-linear-gradient(0deg, rgba(120, 200, 255, .025) 0 1px, transparent 1px 3px); }
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(2, 4, 14, .45) 100%); }
       #overlay { z-index: 2; }
       #brand { position: absolute; top: 14px; left: 16px; z-index: 3; pointer-events: none;
                font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
                color: rgba(190, 220, 255, .75); text-shadow: 0 0 8px rgba(80, 180, 255, .6); }
       #brand span { color: rgba(190, 220, 255, .4); }
-      #hint { position: absolute; bottom: 16px; right: 16px; z-index: 3;
+      #hint[hidden] { display: none; }
+      #hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 3;
               pointer-events: none; font: 10px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .2em;
-              color: rgba(190, 220, 255, .55); white-space: nowrap; }
+              color: rgba(190, 220, 255, .6); white-space: nowrap; text-align: center; line-height: 1.9; }
+      #status { position: absolute; top: 12px; right: 16px; z-index: 3; pointer-events: none;
+                font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; white-space: pre;
+                color: rgba(200, 230, 255, .8); text-shadow: 0 0 8px rgba(80, 180, 255, .5); }
       @media (max-width: 700px) { #hint { display: none; } }
       #start { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4;
                font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
@@ -48,9 +50,12 @@
       <div id="fx"></div>
       <canvas id="overlay"></canvas>
       <div id="brand">BEATDROP <span>// SPATIAL MIX</span></div>
-      <div id="hint">PINCH OR GRIP A WAVEFORM · DRAG TO PAN / LEVEL · BOTH HANDS TO STRETCH</div>
+      <div id="status"></div>
+      <div id="hint">FIST = GRAB · TAP = MUTE · TWO FISTS ON ONE STEM = STRETCH FX · ONE STEM PER HAND = PULL APART TO ISOLATE<br>
+        ◯ LEFT CAP = LOOP (RAISE = LONGER, DRAG OUT = FLOATING CLIP) · ◐ RIGHT CAP or TWIST A HELD STEM = FILTER · FINGERTIPS TOGETHER, POINTING DOWN = LIFT TO BUILD, LET GO TO DROP<br>
+        SPACE PLAY · R RESET · C CALIBRATE GRIP · H DEBUG</div>
       <button id="start" hidden>▶ START SESSION</button>
-      <div id="hud">Starting camera…</div>
+      <div id="hud" class="hidden">Starting camera…</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

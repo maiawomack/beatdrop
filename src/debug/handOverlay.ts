@@ -1,12 +1,28 @@
-import { HAND_CONNECTIONS, viewToPixels, type GrabGesture, type PerceptionFrame } from '../perception';
+import type { HandMode } from '../ar/InteractionController';
+import { HAND_CONNECTIONS, viewToPixels, type GrabGesture, type HandId, type PerceptionFrame } from '../perception';
 
 const HAND_COLORS = { Left: '#4fc3f7', Right: '#ffb74d' } as const;
+
+/** Short label under the cursor for what the hand is doing (idle / hover show nothing). */
+const MODE_LABELS: Partial<Record<HandMode, string>> = {
+  repositioning: 'MOVE',
+  stretching: 'STRETCH FX',
+  blending: 'BLEND',
+  loopSelecting: 'LOOP',
+  clipPulling: 'PULL OUT LOOP',
+  filterControl: 'FILTER',
+  buildArmed: 'BUILD',
+  building: 'BUILD',
+  dropPending: 'DROP',
+  trackingLost: 'LOST',
+};
 
 /** Debug visualization of a PerceptionFrame: skeletons, labels, grab cursor. */
 export function drawHandOverlay(
   ctx: CanvasRenderingContext2D,
   frame: PerceptionFrame,
   gesture: GrabGesture = 'grab',
+  modes?: ReadonlyMap<HandId, HandMode>,
 ): void {
   const { width: w, height: h } = ctx.canvas;
   const scale = w / 1000; // keep line widths sane across resolutions
@@ -14,27 +30,17 @@ export function drawHandOverlay(
   for (const hand of frame.hands) {
     const color = HAND_COLORS[hand.id];
     const pts = hand.landmarks.map((p) => viewToPixels(p, w, h));
-    ctx.globalAlpha = hand.tracked ? 1 : 0.35;
-
+    // Faint skeleton: enough to see tracking, without competing with the waveforms.
+    ctx.globalAlpha = hand.tracked ? 0.4 : 0.15;
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2 * scale;
+    ctx.lineWidth = 1.2 * scale;
     ctx.beginPath();
     for (const [a, b] of HAND_CONNECTIONS) {
       ctx.moveTo(pts[a].x, pts[a].y);
       ctx.lineTo(pts[b].x, pts[b].y);
     }
     ctx.stroke();
-
-    ctx.fillStyle = '#fff';
-    for (const p of pts) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3 * scale, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.font = `${16 * scale}px system-ui, sans-serif`;
-    ctx.fillStyle = color;
-    ctx.fillText(hand.id, pts[0].x + 10 * scale, pts[0].y + 20 * scale);
+    ctx.globalAlpha = hand.tracked ? 1 : 0.35;
 
     // Grab cursor: a progress arc fills as the hand closes, solid dot once engaged.
     const g = hand[gesture];
@@ -56,6 +62,15 @@ export function drawHandOverlay(
       ctx.beginPath();
       ctx.arc(c.x, c.y, r, -Math.PI / 2, -Math.PI / 2 + g.strength * Math.PI * 2);
       ctx.stroke();
+    }
+
+    const label = modes && MODE_LABELS[modes.get(hand.id) ?? 'idle'];
+    if (label) {
+      ctx.font = `700 ${11 * scale}px ui-monospace, "SF Mono", Menlo, monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = color;
+      ctx.fillText(label, c.x, c.y + r + 6 * scale);
     }
   }
   ctx.globalAlpha = 1;

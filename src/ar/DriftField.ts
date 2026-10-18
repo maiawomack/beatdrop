@@ -1,5 +1,5 @@
 import type { GrabGesture, HandId, PerceptionFrame, Point2 } from '../perception';
-import type { HoloObject } from './HoloObject';
+import { effectiveHalfWidth, type HoloObject } from './HoloObject';
 
 export interface DriftConfig {
   /** How strongly hand velocity pushes objects. */
@@ -69,7 +69,7 @@ export class DriftField {
       if (obj.holders.length === 0) {
         const cx = (obj.position.x + obj.drift.x) * this.aspect;
         const cy = obj.position.y + obj.drift.y;
-        const reach = obj.halfSize.x * influenceScale;
+        const reach = effectiveHalfWidth(obj) * influenceScale;
         for (const h of hands) {
           const dist = Math.hypot(h.p.x - cx, h.p.y - cy);
           if (dist >= reach) continue;

@@ -68,6 +68,19 @@ export interface HandState {
    * Ratio is the more-closed of the two, normalized so < 1 means engaged-ish.
    */
   grab: GestureState;
+  /**
+   * "Lift" pose: hand upside down with the fingertips bunched together and
+   * pointing down, like holding something up by a string. Used for
+   * build/drop: lift it to build, let go (open the fingers) to drop.
+   * Point is the bunched fingertips. Optional so older recordings still load.
+   */
+  lift?: GestureState;
+  /**
+   * Smoothed in-plane hand rotation, radians, view space (y down, so
+   * increasing = clockwise as the user sees it): angle of wrist -> middle
+   * knuckle. Robust in a fist. Optional so older recordings still load.
+   */
+  roll?: number;
 }
 
 export interface PerceptionFrame {

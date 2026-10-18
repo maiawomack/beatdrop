@@ -34,3 +34,21 @@ export async function loadStemFiles(
   }
   return null;
 }
+
+/**
+ * Tempo for flat stem files: reads `bpm` and `firstBeatSec` from
+ * `<base>manifest.json` (same fields as the Task 5 TrackManifest) if present.
+ * Returns null when unknown; the engine then disables loops and plays drops
+ * immediately instead of on the bar.
+ */
+export async function loadTempo(base = '/stems/'): Promise<{ bpm: number; firstBeatSec: number } | null> {
+  try {
+    const res = await fetch(`${base}manifest.json`);
+    if (!res.ok || res.headers.get('content-type')?.includes('text/html')) return null;
+    const m = (await res.json()) as { bpm?: unknown; firstBeatSec?: unknown };
+    if (typeof m.bpm !== 'number' || !(m.bpm > 30 && m.bpm < 300)) return null;
+    return { bpm: m.bpm, firstBeatSec: typeof m.firstBeatSec === 'number' ? m.firstBeatSec : 0 };
+  } catch {
+    return null;
+  }
+}

@@ -1,15 +1,29 @@
+/// <reference types="vite/client" />
+import { syncClips } from './ar/clips';
 import { DriftField } from './ar/DriftField';
-import { createHoloObject } from './ar/HoloObject';
+import { createHoloObject, stemView, type HoloObject } from './ar/HoloObject';
 import { InteractionController } from './ar/InteractionController';
-import { DEFAULT_STEMS, defaultStemLayout } from './ar/layout';
+import { NeonScene } from './ar/NeonScene';
+import { DEFAULT_STEMS, defaultPositions, defaultStemLayout } from './ar/layout';
 import { WaveformRenderer } from './ar/WaveformRenderer';
+import { beatAt, wallNow, type AudioStateSource } from './audio/AudioCommands';
 import { WebAudioEngine } from './audio/WebAudioEngine';
 import { createEngineWaveforms } from './bridge/engineWaveforms';
 import { createStemAudioBridge } from './bridge/stemAudioBridge';
 import { drawHandOverlay } from './debug/handOverlay';
-import { PerceptionPipeline, type GrabGesture, type HandState } from './perception';
+import { InteractionRecorder } from './debug/recorder';
+import { hostAudioEngine } from './integration/broadcastSync';
+import {
+  GrabClassifier,
+  PerceptionPipeline,
+  type GrabGesture,
+  type GrabModel,
+  type HandState,
+  type PerceptionFrame,
+  type Point2,
+} from './perception';
 
-/** 'grab' = pinch OR whole-hand grip; 'pinch' / 'grip' = only that gesture. */
+/** 'grab' = closed fist (pinch optional via grabIncludesPinch), aimed at the fingertips. */
 const GRAB_GESTURE: GrabGesture = 'grab';
 
 const stage = document.getElementById('stage') as HTMLDivElement;
@@ -17,6 +31,8 @@ const video = document.getElementById('webcam') as HTMLVideoElement;
 const canvas = document.getElementById('overlay') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
 const startButton = document.getElementById('start') as HTMLButtonElement;
+const hint = document.getElementById('hint') as HTMLDivElement;
+const status = document.getElementById('status') as HTMLDivElement;
 const ctx = canvas.getContext('2d')!;
 
 function fitStage(): void {
@@ -39,6 +55,116 @@ function describe(hand: HandState | undefined): string {
   return `${phase.padEnd(5)} grip ${hand.grip.ratio.toFixed(2)}  pinch ${hand.pinch.ratio.toFixed(2)}${status}`;
 }
 
+/**
+ * Copy authoritative engine state into each object's read-only mirror. When
+ * nobody is stretching it, the visual stretch follows the engine's FX value,
+ * so changes made elsewhere (e.g. the DJ monitor) show up here too.
+ */
+function syncFromEngine(objects: HoloObject[], engine: AudioStateSource, interaction: InteractionController): void {
+  for (const obj of objects) {
+    const s = engine.stems.get(obj.id);
+    if (!s) continue;
+    obj.audio = stemView(s);
+    if (!obj.stretch) obj.stretchAmount = s.fx;
+  }
+  interaction.perfView = { dropPending: engine.perf.dropPending };
+}
+
+/** Compact musical status: tempo, bar.beat with beat lights, transport, source. */
+function statusText(engine: AudioStateSource, source: string): string {
+  const t = engine.transport;
+  const beat = beatAt(t);
+  const bpm = t.bpm === null ? '— BPM' : `${Math.round(t.bpm)} BPM`;
+  let pos = '';
+  if (beat !== null) {
+    const inBar = Math.floor(beat) % t.beatsPerBar;
+    const bar = (Math.floor(beat / t.beatsPerBar) % 999) + 1;
+    pos = `  ${String(bar).padStart(2, ' ')}.${inBar + 1}  ` + Array.from({ length: t.beatsPerBar }, (_, i) => (i === inBar ? '●' : '○')).join('');
+  }
+  return `${t.playing ? '▶' : '❚❚'}  ${bpm}${pos}  ·  ${source}`;
+}
+
+function cameraErrorMessage(err: unknown): string {
+  const name = err instanceof DOMException ? err.name : '';
+  if (name === 'NotAllowedError') return 'Camera access was blocked. Allow the camera for this site and reload.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No usable camera found. Connect a webcam and reload.';
+  if (name === 'NotReadableError') return 'The camera is in use by another app. Close it and reload.';
+  return `Error: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+/** Big centered instruction banner (calibration). */
+function drawBanner(title: string, detail: string): void {
+  const u = canvas.height / 720;
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 10, 20, 0.72)';
+  ctx.fillRect(0, canvas.height * 0.36, canvas.width, canvas.height * 0.26);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `700 ${u * 44}px ui-monospace, Menlo, monospace`;
+  ctx.fillText(title, canvas.width / 2, canvas.height * 0.44);
+  ctx.font = `500 ${u * 17}px ui-monospace, Menlo, monospace`;
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  detail.split('\n').forEach((line, i) => ctx.fillText(line, canvas.width / 2, canvas.height * 0.52 + i * u * 26));
+  ctx.restore();
+}
+
+/** Red "REC" dot in the top-right corner while the debug recorder runs. */
+function drawRecIndicator(seconds: number, label?: string): void {
+  const u = canvas.height / 720;
+  ctx.save();
+  ctx.fillStyle = '#ff3b3b';
+  ctx.beginPath();
+  ctx.arc(canvas.width - u * 162, u * 22, u * 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = `600 ${u * 13}px ui-monospace, Menlo, monospace`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`REC ${seconds.toFixed(0)}s${label ? ` · ${label.toUpperCase()}` : ''}`, canvas.width - u * 150, u * 22);
+  ctx.restore();
+}
+
+/** v2: fist-only. Older models were trained with pincers too, so they're ignored. */
+const MODEL_KEY = 'beatdrop.grabModel.v2';
+/** Display easing toward the tracked position (1/s): ~25 ms lag, removes camera-rate stepping. */
+const DISPLAY_RATE = 40;
+
+function loadGrabModel(): GrabClassifier | null {
+  try {
+    const raw = localStorage.getItem(MODEL_KEY);
+    if (!raw) return null;
+    const c = GrabClassifier.fromModel(JSON.parse(raw) as GrabModel);
+    return c.ready ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGrabModel(c: GrabClassifier): void {
+  try {
+    localStorage.setItem(MODEL_KEY, JSON.stringify(c.toModel()));
+  } catch {
+    /* storage unavailable: the model still works for this session */
+  }
+}
+
+/**
+ * Grab calibration (press C): a few seconds of open hands, then a few seconds
+ * of grab poses (pincer, fist, wrap-around). The perception layer learns
+ * the user's own poses from these samples.
+ */
+interface CalibrationStep {
+  label: 0 | 1 | null;
+  ms: number;
+  title: string;
+  detail: string;
+}
+const CALIBRATION: CalibrationStep[] = [
+  { label: null, ms: 1500, title: 'Get ready: OPEN hands', detail: 'Next: hands open or relaxed — anything that is NOT a grab' },
+  { label: 0, ms: 5000, title: 'OPEN', detail: 'Relaxed, spread, half-curled, pointing, pinching. Move around. Both hands.' },
+  { label: null, ms: 1500, title: 'Get ready: FIST', detail: 'Next: close your hand into a fist' },
+  { label: 1, ms: 6000, title: 'FIST', detail: 'Close your hand into a fist (loose or tight). Move around. Both hands.' },
+];
+
 async function main(): Promise<void> {
   hud.textContent = 'Starting camera + loading hand model + preparing audio…';
   const [pipeline, audio] = await Promise.all([
@@ -48,47 +174,184 @@ async function main(): Promise<void> {
   fitStage();
   window.addEventListener('resize', fitStage);
 
+  // This window owns the audio engine; other windows (DJ monitor) connect over BroadcastChannel.
+  let hostWarning = '';
+  const stopHosting = hostAudioEngine(audio, {
+    onConflict: () => {
+      hostWarning = '  ·  ⚠ ANOTHER WINDOW IS ALSO PLAYING AUDIO';
+      console.warn('[sync] Another window is hosting an audio engine: only one window should (duplicate playback).');
+    },
+  });
+  window.addEventListener('pagehide', () => {
+    stopHosting();
+    pipeline.dispose();
+    void audio.close();
+  });
+
   const aspect0 = video.videoWidth / video.videoHeight;
   const stems = defaultStemLayout(aspect0).map(createHoloObject);
 
-  const bridge = createStemAudioBridge(audio);
-  // Push initial pan/volume so the engine (and readouts) start in sync.
-  for (const obj of stems) bridge({ type: 'move', object: obj });
+  pipeline.gestures.classifier = loadGrabModel();
+  let calib: { step: number; stepStart: number } | null = null;
+  let calibDone: { at: number; text: string } | null = null;
 
-  const interaction = new InteractionController(stems, aspect0, bridge, GRAB_GESTURE);
+  const recorder = new InteractionRecorder({ aspect: aspect0, gesture: GRAB_GESTURE, userAgent: navigator.userAgent });
+  const interaction = new InteractionController(
+    stems,
+    aspect0,
+    recorder.tap(createStemAudioBridge(audio)),
+    GRAB_GESTURE,
+  );
+  syncFromEngine(stems, audio, interaction);
+  // Dev only: poke the session from the console (e.g. __beatdrop.audio.dispatch({ type: 'drop' })).
+  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { audio, interaction, stems } });
   const drift = new DriftField(aspect0, GRAB_GESTURE);
-  const waveforms = new WaveformRenderer(createEngineWaveforms(audio));
+  const waveSource = createEngineWaveforms(audio);
+  const waveforms = new WaveformRenderer(waveSource);
+  const neon = new NeonScene();
 
   // Browsers only allow audio to start from a user gesture.
   startButton.hidden = false;
   startButton.addEventListener('click', () => {
     void audio.start();
     startButton.hidden = true;
+    hint.hidden = true;
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'h' || e.key === 'H') hud.classList.toggle('hidden');
-    if (e.key === ' ') {
+    const key = e.key.toLowerCase();
+    if (key === 'h') hud.classList.toggle('hidden');
+    if (key === 'c' && !e.repeat) {
+      if (e.shiftKey) {
+        pipeline.gestures.clearCalibration();
+        try {
+          localStorage.removeItem(MODEL_KEY);
+        } catch {
+          /* ignore */
+        }
+        calibDone = { at: performance.now(), text: 'Calibration cleared: using default fist grip' };
+      } else {
+        calib = { step: 0, stepStart: performance.now() };
+        pipeline.gestures.collect(null);
+      }
+    }
+    if (key === 'd') recorder.toggle();
+    // While recording, hold O / P / F to label frames open / pinch / fist for tuning.
+    if (!e.repeat && recorder.recording) {
+      if (key === 'o') recorder.label = 'open';
+      if (key === 'p') recorder.label = 'pinch';
+      if (key === 'f') recorder.label = 'fist';
+    }
+    if (key === 'r') interaction.resetLayout(defaultPositions(video.videoWidth / video.videoHeight));
+    if (key === ' ') {
       e.preventDefault();
       startButton.hidden = true;
+      hint.hidden = true;
       void audio.togglePause();
     }
+    // 1/2/3 mute, Shift+1/2/3 solo (e.code so Shift doesn't turn "1" into "!").
+    const digit = /^Digit([1-3])$/.exec(e.code);
+    const obj = digit ? stems[Number(digit[1]) - 1] : undefined;
+    if (obj) {
+      const s = audio.stems.get(obj.id);
+      if (e.shiftKey) audio.dispatch({ type: 'setSolo', stemId: obj.id, value: !s?.solo });
+      else audio.dispatch({ type: 'setMute', stemId: obj.id, value: !s?.muted });
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (['o', 'p', 'f'].includes(e.key.toLowerCase())) recorder.label = undefined;
   });
 
   let frames = 0;
   let fps = 0;
   let fpsWindowStart = performance.now();
 
+  // Tracking runs at camera rate (~24-30 fps); drawing runs at display rate.
+  // Between camera frames, each stem glides toward its real position, so
+  // motion looks continuous instead of stepping with the camera.
+  let lastFrame: PerceptionFrame | null = null;
+  let banner: { title: string; detail: string } | null = null;
+  const shown = new Map<string, Point2>();
+  let lastDraw = performance.now();
+  const draw = (now: number) => {
+    requestAnimationFrame(draw);
+    const dt = Math.min(0.1, (now - lastDraw) / 1000);
+    lastDraw = now;
+    const k = 1 - Math.exp(-DISPLAY_RATE * dt);
+    const display = interaction.objects.map((obj) => {
+      const prev = shown.get(obj.id) ?? obj.position;
+      const p = { x: prev.x + (obj.position.x - prev.x) * k, y: prev.y + (obj.position.y - prev.y) * k };
+      shown.set(obj.id, p);
+      return { ...obj, position: p };
+    });
+    const pair = interaction.blendPair;
+    const find = (o: HoloObject) => display.find((d) => d.id === o.id) ?? o;
+    const scene = {
+      t: now / 1000,
+      dt,
+      beat: waveSource.beat?.() ?? null,
+      level: (id: string) => waveSource.level?.(id) ?? 0,
+      blend: pair ? { a: find(pair[0]), b: find(pair[1]), isolation: interaction.isolation } : null,
+      nowMs: wallNow(),
+      build: interaction.build,
+      perf: audio.perf,
+    };
+    neon.update(display, scene, canvas.width, canvas.height);
+    waveforms.pulse = neon.pulse;
+    waveforms.energy = neon.energy;
+    waveforms.impact = neon.impact;
+    const line = statusText(audio, audio.sourceKind === 'files' ? 'STEM FILES' : 'DEMO SONG') + hostWarning;
+    if (status.textContent !== line) status.textContent = line;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    neon.drawBackground(ctx);
+    waveforms.render(ctx, display, now, { backdrop: video });
+    neon.drawForeground(ctx, scene);
+    if (lastFrame) drawHandOverlay(ctx, lastFrame, GRAB_GESTURE, interaction.handModes);
+    if (banner) drawBanner(banner.title, banner.detail);
+    if (recorder.recording) drawRecIndicator(recorder.seconds, recorder.label);
+  };
+  requestAnimationFrame(draw);
+
   pipeline.onFrame((frame) => {
     const aspect = video.videoWidth / video.videoHeight;
+    syncClips(audio, interaction);
+    syncFromEngine(stems, audio, interaction);
     interaction.setAspect(aspect);
     interaction.update(frame);
     drift.setAspect(aspect);
     drift.step(interaction.objects, frame);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    waveforms.render(ctx, interaction.objects, frame.timestamp, { mix: audio.stems, backdrop: video });
-    drawHandOverlay(ctx, frame, GRAB_GESTURE);
+    lastFrame = frame;
+    if (calib) {
+      const step = CALIBRATION[calib.step];
+      if (frame.timestamp - calib.stepStart >= step.ms) {
+        calib.step++;
+        calib.stepStart = frame.timestamp;
+        if (calib.step >= CALIBRATION.length) {
+          const c = pipeline.gestures.finishCalibration();
+          const { open, grab } = c.counts;
+          calibDone = c.ready
+            ? { at: frame.timestamp, text: `Calibrated ✓  (${open} open / ${grab} grab samples)` }
+            : { at: frame.timestamp, text: 'Not enough hand samples: press C to try again' };
+          if (c.ready) saveGrabModel(c);
+          calib = null;
+        } else {
+          pipeline.gestures.collect(CALIBRATION[calib.step].label);
+        }
+      }
+    }
+    if (calib) {
+      const step = CALIBRATION[calib.step];
+      const left = Math.max(0, step.ms - (frame.timestamp - calib.stepStart)) / 1000;
+      const n = pipeline.gestures.sampleCounts;
+      banner = { title: step.title, detail: `${step.detail}\n${left.toFixed(1)}s   ·   ${n.open} open / ${n.grab} grab` };
+    } else if (calibDone && frame.timestamp - calibDone.at < 2500) {
+      banner = { title: calibDone.text, detail: '' };
+    } else {
+      banner = null;
+    }
+    recorder.capture(frame, stems);
 
     frames++;
     if (frame.timestamp - fpsWindowStart >= 1000) {
@@ -96,15 +359,23 @@ async function main(): Promise<void> {
       frames = 0;
       fpsWindowStart = frame.timestamp;
     }
+    if (hud.classList.contains('hidden')) return;
     const byId = (id: string) => frame.hands.find((h) => h.id === id);
     const stemLines = stems.map((obj) => {
       const s = audio.stems.get(obj.id);
-      const held = obj.holders.length ? `held by ${obj.holders.join('+')}` : 'free';
-      const mix = s ? `  pan ${s.pan.toFixed(2)}  vol ${s.volume.toFixed(2)}  stretch ${s.stretch.toFixed(2)}` : '';
-      return `${obj.label.padEnd(6)}: ${held.padEnd(19)}${mix}`;
+      const owner = obj.levelHand ? `level:${obj.levelHand}` : obj.holders.length ? `held:${obj.holders.join('+')}` : 'free';
+      const mix = s
+        ? `vol ${s.volume.toFixed(2)}  fx ${s.fx.toFixed(2)}  filt ${s.filter.toFixed(2)}${s.loop ? `  loop ${s.loop.beats}${s.loop.engaged ? '' : '…'}` : ''}${s.muted ? '  MUTE' : ''}${s.solo ? '  SOLO' : ''}`
+        : '';
+      return `${obj.label.padEnd(6)}: ${owner.padEnd(16)}${mix}`;
     });
+    const modes = [...interaction.handModes].map(([h, m]) => `${h}: ${m}`).join('   ') || 'no hands';
+    const perf = audio.perf;
+    const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
     hud.textContent =
-      `tracking ${fps.toFixed(0)} fps   audio: ${audio.sourceKind === 'files' ? 'stem files' : 'demo song'} ${audio.playing ? '▶' : '❚❚'}   [space] play/pause  [H] hide\n` +
+      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   audio: ${audio.sourceKind === 'files' ? 'stem files' : 'demo song'} ${audio.playing ? '▶' : '❚❚'}\n` +
+      `[space] play  [1-3] mute  [⇧1-3] solo  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record (hold O/P/F to label)  [H] hide\n` +
+      `modes  ${modes}\n${perfLine}\n` +
       `Left : ${describe(byId('Left'))}\n` +
       `Right: ${describe(byId('Right'))}\n` +
       stemLines.join('\n');
@@ -115,5 +386,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error(err);
-  hud.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+  hud.classList.remove('hidden');
+  hud.textContent = cameraErrorMessage(err);
 });

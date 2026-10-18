@@ -5,7 +5,8 @@
  * "vocals" is a formant-filtered synth lead standing in for a real voice.
  */
 
-const BPM = 120;
+export const DEMO_BPM = 120;
+const BPM = DEMO_BPM;
 const BEAT = 60 / BPM;
 const BARS = 8;
 const LENGTH = BARS * 4 * BEAT; // 16 s, loops seamlessly on the bar
