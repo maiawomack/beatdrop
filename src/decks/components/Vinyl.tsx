@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DeckState } from '../../shared/types';
 import type { EngineStore } from '../engineStore';
 import { useAnimationFrame } from '../hooks';
@@ -21,6 +21,8 @@ function beatPulse(posSec: number, bpm: number, firstBeatSec: number): number {
   return Math.exp(-phase * 7) * accent;
 }
 const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+/** Seconds of audio per full turn of the record (33⅓ rpm). */
+const SEC_PER_TURN = 1.8;
 
 /** Small deterministic PRNG so each record keeps the same grooves and dust. */
 function rng(seed: number) {
@@ -141,6 +143,36 @@ export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
     return () => observer.disconnect();
   }, [deck.id]);
 
+  /**
+   * Mouse scratch: grab the record and turn it around its centre (clockwise = forward),
+   * like a hand on the platter. Same engine scratch as the spatial screen's open palm.
+   */
+  const grab = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!deck.track || e.button !== 0) return;
+    const el = e.currentTarget;
+    const box = el.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const angleOf = (ev: { clientX: number; clientY: number }) => Math.atan2(ev.clientY - cy, ev.clientX - cx);
+    let last = angleOf(e);
+    let turned = 0;
+    el.setPointerCapture(e.pointerId);
+    engine.dispatch({ type: 'SCRATCH_START', deck: deck.id });
+    el.onpointermove = (ev) => {
+      const a = angleOf(ev);
+      let d = a - last;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      last = a;
+      turned += d;
+      engine.dispatch({ type: 'SCRATCH_MOVE', deck: deck.id, offsetSec: (turned / (2 * Math.PI)) * SEC_PER_TURN });
+    };
+    el.onpointerup = el.onpointercancel = () => {
+      el.onpointermove = el.onpointerup = el.onpointercancel = null;
+      engine.dispatch({ type: 'SCRATCH_END', deck: deck.id });
+    };
+  };
+
   useAnimationFrame(() => {
     const pos = engine.position(deck.id);
 
@@ -181,7 +213,7 @@ export function Vinyl({ deck, engine, firstBeatSec, crossfader }: Props) {
     >
       <div className="pulse" ref={pulseRef}>
         <div className="beat-glow" />
-        <div className="spin" ref={spinRef} style={{ animationDuration: `${1.8 / deck.playbackRate}s` }}>
+        <div className="spin" ref={spinRef} onPointerDown={grab} style={{ animationDuration: `${SEC_PER_TURN / deck.playbackRate}s` }}>
           <canvas ref={surface} className="surface" />
           <svg className="label" viewBox="0 0 100 100">
             <defs>

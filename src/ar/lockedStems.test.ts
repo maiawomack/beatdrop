@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { GesturePhase, HandId, Point2 } from '../perception';
 import { LEVEL_DEADZONE, LEVEL_TRAVEL, PINCH_ARM_MS, TWO_UP_ARM_MS, VOLUME_MAX_RATE } from './InteractionController';
-import { FRAME_MS, gesture, hand, Rig } from './testRig';
+import { ASPECT, FRAME_MS, gesture, hand, Rig } from './testRig';
 
 /** Deck stems are locked in their column: grab + up/down = volume, two hands apart vertically = taller (FX). */
 describe('locked deck stems', () => {
@@ -150,20 +150,83 @@ describe('fader bars', () => {
     expect(drums.position).toEqual(home);
   });
 
-  it('a pinch anywhere along the bar grabs it, and the drag is relative', () => {
+  for (const id of ['Right', 'Left'] as const) it(`grip the top and pull down in one motion (${id} hand): it still takes the bar and follows from the grip`, () => {
+    rig.frame();
+    const p = topOf('drums'); // full volume: the handle is at the top of the track
+    rig.frame(pinch(id, p, 'start'));
+    // Straight into the pull, before the pinch has counted (PINCH_ARM_MS).
+    const to = { x: p.x, y: p.y + TRACK * 0.5 + 0.01 };
+    for (let i = 1; i <= 5; i++) rig.frame(pinch(id, { x: p.x, y: p.y + (to.y - p.y) * (i / 5) }));
+    for (let i = 0; i < 20; i++) rig.frame(pinch(id, to));
+    expect(rig.stem('drums').holders).toEqual([id]);
+    expect(rig.engine.stems.get('drums')!.volume).toBeCloseTo(0.5, 2);
+  });
+
+  it('a pinch that also looks like fingers up is a pinch: it takes the bar, never the crossfader', () => {
+    rig.frame();
+    const p = topOf('drums');
+    const pinchUp = (phase: GesturePhase) => ({ ...pinch('Right', p, phase), twoUp: gesture('held', p) });
+    rig.frame(pinchUp('start'));
+    for (let t = 0; t <= Math.max(PINCH_ARM_MS, TWO_UP_ARM_MS) + 2 * FRAME_MS; t += FRAME_MS) rig.frame(pinchUp('held'));
+    expect(rig.stem('drums').holders).toEqual(['Right']);
+    expect(rig.controller.handModes.get('Right')).not.toBe('crossfading');
+    expect(rig.controller.crossfadeZone?.hand ?? null).toBeNull();
+  });
+
+  it('a pinch with the other fingers curled (it reads as a fist too) still takes the bar', () => {
+    rig.frame();
+    const p = topOf('drums');
+    const fistPinch = (phase: GesturePhase) => ({ ...pinch('Right', p, phase), grip: gesture(phase, p) });
+    rig.frame(fistPinch('start'));
+    for (let t = 0; t <= PINCH_ARM_MS + 2 * FRAME_MS; t += FRAME_MS) rig.frame(fistPinch('held'));
+    expect(rig.stem('drums').holders).toEqual(['Right']);
+    expect(rig.controller.handModes.get('Right')).toBe('volume');
+  });
+
+  it('the bars and the tempo zone never overlap: a fist beside the outer bar is not tempo, beyond it is', () => {
+    rig.frame();
+    rig.controller.tempoStrips = [{ deck: 'A', position: { x: 0, y: 0.5 }, color: '#4fd9d2', hover: 0, hand: null, value: null }];
+    const outer = rig.controller.objects.filter((o) => o.vertical).reduce((a, b) => (b.position.x < a.position.x ? b : a));
+    const edge = outer.position.x - outer.halfSize.x / ASPECT; // its outer edge
+    const fist = (x: number, phase: GesturePhase) => ({ ...hand('Right', { x, y: 0.3 }, phase), grip: gesture(phase, { x, y: 0.3 }), scale: 0.3 });
+    // Right beside the bar (a big hand up close would count as "out to the side" here): not tempo.
+    rig.frame(fist(edge - 0.005, 'start'));
+    for (let i = 0; i < 12; i++) rig.frame(fist(edge - 0.005, 'held'));
+    expect(rig.controller.handModes.get('Right')).not.toBe('tempo');
+    rig.frame(fist(edge - 0.005, 'end'));
+    for (let i = 0; i < 3; i++) rig.frame();
+    // Clearly beyond it: tempo.
+    const x = Math.max(0.01, edge - 0.08);
+    rig.frame(fist(x, 'start'));
+    for (let i = 0; i < 12; i++) rig.frame(fist(x, 'held'));
+    expect(rig.controller.handModes.get('Right')).toBe('tempo');
+  });
+
+  it('only the top of the fill grabs: a pinch deep inside the bar does nothing', () => {
     rig.frame();
     const v = rig.stem('vocals'); // full volume: the top of the fill is at the top of the track
-    const p = { x: v.position.x, y: v.position.y + 0.15 }; // deep inside the bar
-    pinchAt('Left', p);
-    expect(v.holders).toEqual(['Left']);
-    drag('Left', p, { x: p.x, y: p.y + TRACK * 0.25 + 0.01 }, 15);
-    expect(rig.engine.stems.get('vocals')!.volume).toBeCloseTo(0.75, 2);
+    pinchAt('Left', { x: v.position.x, y: v.position.y + 0.15 }); // deep inside the bar
+    expect(v.holders).toHaveLength(0);
+  });
+
+  it('the bar glides after the pinch (no jumps), and lands where the hand stopped', () => {
+    rig.engine.dispatch({ type: 'setVolume', stemId: 'drums', value: 0.5 });
+    rig.frame();
+    const p = topOf('drums');
+    pinchAt('Right', p);
+    const to = { x: p.x, y: p.y - TRACK * 0.4 - 0.01 };
+    rig.frame(pinch('Right', to)); // one big jump of the hand
+    const after = rig.engine.stems.get('drums')!.volume;
+    expect(after).toBeGreaterThan(0.5);
+    expect(after).toBeLessThan(0.75); // eased, not snapped
+    for (let i = 0; i < 20; i++) rig.frame(pinch('Right', to));
+    expect(rig.engine.stems.get('drums')!.volume).toBeCloseTo(0.9, 2);
   });
 
   it('pinching a bar wins over the lift pose (reaching down to the bars never builds)', () => {
     rig.frame();
     const v = rig.stem('drums');
-    const p = { x: v.position.x, y: v.position.y };
+    const p = topOf('drums');
     const pinchLift = (phase: GesturePhase) => ({ ...pinch('Left', p, phase), lift: gesture(phase, p) });
     rig.frame(pinchLift('start'));
     for (let t = 0; t <= PINCH_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(pinchLift('held'));
@@ -199,15 +262,12 @@ describe('fader bars', () => {
     expect(rig.stem('drums').holders).toHaveLength(0);
   });
 
-  it('a pinch on a record scratches it', () => {
+  it('a pinch on a record does nothing (records are open-palm only)', () => {
     rig.controller.platters = [{ deck: 'A', position: { x: 0.2, y: 0.2 }, radius: 0.08, color: '#fff', hover: 0, hand: null, offsetSec: 0 }];
     pinchAt('Right', { x: 0.2, y: 0.2 });
-    expect(rig.controller.handModes.get('Right')).toBe('scratching');
     rig.frame(pinch('Right', { x: 0.2 + 0.05, y: 0.2 }));
-    const last = rig.commands('scratch').at(-1) as { phase: string; offsetSec: number };
-    expect(last.phase).toBe('move');
-    expect(last.offsetSec).toBeGreaterThan(0);
-    rig.frame(pinch('Right', { x: 0.25, y: 0.2 }, 'end'));
-    expect((rig.commands('scratch').at(-1) as { phase: string }).phase).toBe('end');
+    expect(rig.controller.handModes.get('Right')).not.toBe('scratching');
+    expect(rig.commands('scratch')).toHaveLength(0);
   });
+
 });

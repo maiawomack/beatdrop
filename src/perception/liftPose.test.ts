@@ -76,6 +76,28 @@ describe('lift pose (fingertips bunched, pointing down)', () => {
   });
 });
 
+describe('lift pose, fingers hanging from bent knuckles', () => {
+  it('wrist up beside the knuckles, fingers together hanging down, thumb tucked away: a lift', () => {
+    // Like holding something by a string with the back of the hand to the camera: the
+    // forearm is level, the hand bends down at the knuckles, the thumb isn't at the tips.
+    const lm: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+    lm[0] = { x: 0.72, y: 0.36, z: 0 }; // wrist, to the right of the knuckles
+    [5, 9, 13, 17].forEach((i, k) => (lm[i] = { x: 0.58 + k * 0.025, y: 0.34 + k * 0.005, z: 0 }));
+    [8, 12, 16, 20].forEach((tip, k) => {
+      const x = 0.58 + k * 0.022;
+      lm[tip - 2] = { x, y: 0.42, z: 0 };
+      lm[tip - 1] = { x, y: 0.48, z: 0 };
+      lm[tip] = { x, y: 0.53 - k * 0.01, z: 0 };
+    });
+    lm[1] = { x: 0.7, y: 0.4, z: 0 };
+    lm[2] = { x: 0.68, y: 0.44, z: 0 };
+    lm[3] = { x: 0.67, y: 0.48, z: 0 };
+    lm[4] = { x: 0.66, y: 0.5, z: 0 }; // thumb, well away from the fingertips
+    const hand: RawHand = { id: 'Right', confidence: 1, landmarks: lm, worldLandmarks: lm.map((p) => ({ ...p })) };
+    expect(run(new GestureProcessor(1), hand, 6, 0).last.lift?.active).toBe(true);
+  });
+});
+
 describe('open palm', () => {
   it('an open, upright hand is a palm; the lift pose and a fist are not', () => {
     const p = new GestureProcessor(1);
@@ -153,6 +175,44 @@ describe('one finger up (☝) also counts', () => {
     h.landmarks[4] = { x: 0.5, y: 0.5, z: 0 };
     h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
     expect(run(new GestureProcessor(1), h, 6, 0).last.twoUp?.active).toBe(true);
+  });
+});
+
+describe('a claw is not fingers up', () => {
+  it('all fingers hooked forward (reaching to grip a bar), index tip above its knuckle: not ☝/✌', () => {
+    const h = makeHand({ down: false, bunched: false });
+    const mcpY = h.landmarks[9]!.y;
+    // Index: up from the knuckle, then hooked toward the camera (tip still above the knuckle).
+    const ix = h.landmarks[5]!.x;
+    h.landmarks[6] = { x: ix, y: mcpY - 0.05, z: 0 };
+    h.landmarks[7] = { x: ix, y: mcpY - 0.07, z: -0.03 };
+    h.landmarks[8] = { x: ix, y: mcpY - 0.05, z: -0.06 };
+    // The other fingers hooked further.
+    for (const tip of [12, 16, 20]) {
+      const x = h.landmarks[tip - 3]!.x;
+      h.landmarks[tip - 2] = { x, y: mcpY - 0.04, z: 0 };
+      h.landmarks[tip - 1] = { x, y: mcpY - 0.03, z: -0.04 };
+      h.landmarks[tip] = { x, y: mcpY, z: -0.08 };
+    }
+    h.landmarks[4] = { x: 0.5, y: mcpY - 0.02, z: -0.05 };
+    h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
+    expect(run(new GestureProcessor(1), h, 6, 0).last.twoUp?.active).toBe(false);
+  });
+});
+
+describe('fingers up has to be clear', () => {
+  it('an index leaning well off vertical (e.g. along the face, hand at the chin) is not fingers up', () => {
+    const h = makeHand({ down: false, bunched: false });
+    for (const tip of [12, 16, 20]) {
+      h.landmarks[tip] = { x: h.landmarks[tip - 3]!.x, y: 0.55, z: 0 };
+      h.landmarks[tip - 1] = { x: h.landmarks[tip - 3]!.x, y: 0.5, z: 0 };
+    }
+    h.landmarks[4] = { x: 0.5, y: 0.5, z: 0 };
+    // Index straight but pointing ~60° off vertical, toward the side.
+    const b = h.landmarks[5]!;
+    [6, 7, 8].forEach((j, k) => (h.landmarks[j] = { x: b.x - 0.035 * (k + 1), y: b.y - 0.02 * (k + 1), z: 0 }));
+    h.worldLandmarks = h.landmarks.map((l) => ({ ...l }));
+    expect(run(new GestureProcessor(1), h, 6, 0).last.twoUp?.active).toBe(false);
   });
 });
 

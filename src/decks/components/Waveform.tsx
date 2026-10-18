@@ -129,8 +129,33 @@ export function Waveform({ deck, engine, waveform, firstBeatSec }: Props & { fir
     g.shadowBlur = 0;
   });
 
+  /**
+   * Grab the orange line and drag it through the song: right = forward, left = back, on the
+   * lane's own time scale. You hear it scrub (an engine scratch) while dragging, and the song
+   * carries on from wherever you let go.
+   */
+  const scrub = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!deck.track || e.button !== 0) return;
+    const el = e.currentTarget;
+    const pxPerSec = el.clientWidth / WINDOW_SEC;
+    const x0 = e.clientX;
+    const from = engine.position(deck.id);
+    let offsetSec = 0;
+    el.setPointerCapture(e.pointerId);
+    engine.dispatch({ type: 'SCRATCH_START', deck: deck.id });
+    el.onpointermove = (ev) => {
+      offsetSec = (ev.clientX - x0) / pxPerSec;
+      engine.dispatch({ type: 'SCRATCH_MOVE', deck: deck.id, offsetSec });
+    };
+    el.onpointerup = el.onpointercancel = () => {
+      el.onpointermove = el.onpointerup = el.onpointercancel = null;
+      engine.dispatch({ type: 'SCRATCH_END', deck: deck.id });
+      if (offsetSec !== 0) engine.dispatch({ type: 'SEEK', deck: deck.id, positionSec: from + offsetSec });
+    };
+  };
+
   return (
-    <div className="wave">
+    <div className="wave" onPointerDown={scrub}>
       <canvas ref={ref} />
     </div>
   );

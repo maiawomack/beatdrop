@@ -367,9 +367,6 @@ export class NeonScene {
       label = 'DROP';
     } else if (f.build?.state === 'armed') {
       label = 'LIFT ▲ TO BUILD';
-    } else if (f.build?.lost) {
-      label = `BUILD ${Math.round(f.build.value * 100)} · HOLDING`;
-      sub = 'BRING YOUR HAND BACK · OPEN IT TO DROP';
     } else if (f.build?.state === 'building') {
       label = `BUILD ${Math.round(f.build.value * 100)}`;
       sub = f.build.value >= RELEASE_DROP_MIN ? 'OPEN YOUR HAND TO DROP' : 'KEEP LIFTING';

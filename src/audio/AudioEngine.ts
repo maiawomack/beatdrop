@@ -14,9 +14,9 @@ import { DeckChannel, clamp, loadScrubProcessor } from './DeckChannel';
 import { estimateTempo } from './tempo';
 
 /** Build-up: master high-pass sweep range (Hz); 24 dB/oct, so the kick and bass really leave. */
-const BUILD_HPF = { min: 10, max: 900 };
+const BUILD_HPF = { min: 10, max: 1300 };
 /** Build-up: stereo width at full build (1 = normal); the drop snaps it back wide. */
-const BUILD_WIDTH = 0.4;
+const BUILD_WIDTH = 0.25;
 /** Build-up: overall level at full build, so the drop lands louder without clipping. */
 const BUILD_LEVEL = 0.85;
 /** Snare roll: starts at this much build, then speeds up (beats, 8ths, 16ths, 32nds) as it rises. */
@@ -25,8 +25,8 @@ const ROLL_START = 0.35;
 const ROLL_TICK_MS = 25;
 const ROLL_AHEAD = 0.12;
 /** Rhythmic gate: from this much build the music chops in time with the roll, deeper near the top. */
-const GATE_START = 0.6;
-const GATE_DEPTH = 0.8;
+const GATE_START = 0.5;
+const GATE_DEPTH = 0.9;
 /** The breath of silence before the drop: up to half a beat, at most this long (s). */
 const DROP_GAP_MAX = 0.15;
 /** With at least this long to wait for the beat (s), the decks tape-stop into the drop instead. */
@@ -583,17 +583,18 @@ export class AudioEngine {
     const shaped = v ** 1.5;
     const hz = BUILD_HPF.min * (BUILD_HPF.max / BUILD_HPF.min) ** shaped;
     for (const f of this.buildHp) f.frequency.setTargetAtTime(hz, at, tc);
-    // A touch of resonance at the cutoff for tension; kept low so it never booms.
-    this.buildHp[1].Q.setTargetAtTime(Math.SQRT1_2 + 1.1 * shaped, at, tc);
+    // Resonance at the cutoff for tension: it whistles and strains as it climbs (the cutoff
+    // is high by then, so it never booms).
+    this.buildHp[1].Q.setTargetAtTime(Math.SQRT1_2 + 2.2 * shaped, at, tc);
     this.width.set(1 - (1 - BUILD_WIDTH) * shaped, at, tc);
     this.buildLevel.gain.setTargetAtTime(1 - (1 - BUILD_LEVEL) * shaped, at, tc);
     this.buildSend.gain.setTargetAtTime(0.35 * v, at, tc);
     // The echo wash piles up and brightens as the build rises.
-    this.buildFeedback.gain.setTargetAtTime(0.4 + 0.28 * v, at, tc);
+    this.buildFeedback.gain.setTargetAtTime(0.4 + 0.32 * v, at, tc);
     this.buildTone.frequency.setTargetAtTime(3500 * 2 ** v, at, tc);
-    this.riserGain.gain.setTargetAtTime(0.07 * v * v, at, tc);
-    this.riserBand.frequency.setTargetAtTime(400 * (8000 / 400) ** v, at, tc);
-    this.riserBand.Q.setTargetAtTime(1 + 2 * v, at, tc);
+    this.riserGain.gain.setTargetAtTime(0.1 * v * v, at, tc);
+    this.riserBand.frequency.setTargetAtTime(400 * (11000 / 400) ** v, at, tc);
+    this.riserBand.Q.setTargetAtTime(1 + 3 * v, at, tc);
     this.riserLfo.frequency.setTargetAtTime(0.25 + 5.75 * v * v, at, tc);
     this.riserLfoDepth.gain.setTargetAtTime(0.15 + 0.55 * v, at, tc);
     for (const deck of DECK_IDS) {

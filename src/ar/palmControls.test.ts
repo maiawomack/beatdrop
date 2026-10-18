@@ -6,6 +6,7 @@ import {
   RECORD_TURNS_PER_SEC,
   SCRATCH_AFTER_LIFT_MS,
   SCRATCH_ARM_MS,
+  SCRATCH_GAIN,
   SCRATCH_VIRTUAL_RADIUS,
   TWO_UP_ARM_MS,
 } from './InteractionController';
@@ -27,7 +28,7 @@ function palm(id: HandId, p: Point2, phase: GesturePhase = 'held', tracked = tru
 }
 
 /** Expected scratch offset (s) for a sideways move of `dx` view-height units at the top of the invisible record. */
-const sideways = (dx: number) => Math.atan2(dx, SCRATCH_VIRTUAL_RADIUS) / (2 * Math.PI) / RECORD_TURNS_PER_SEC;
+const sideways = (dx: number) => (SCRATCH_GAIN * Math.atan2(dx, SCRATCH_VIRTUAL_RADIUS)) / (2 * Math.PI) / RECORD_TURNS_PER_SEC;
 
 describe('open-palm controls', () => {
   let rig: Rig;
@@ -170,12 +171,12 @@ describe('open-palm controls', () => {
     rig.frame(rocking(up, 'start'));
     for (let t = 0; t <= SCRATCH_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(rocking(up));
     for (let i = 1; i <= 5; i++) rig.frame(rocking(up + (i / 5) * (Math.PI / 4))); // tilt 45° clockwise, hand stays put
-    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(0.125 / RECORD_TURNS_PER_SEC, 3);
+    expect(scratches().at(-1)!.offsetSec).toBeCloseTo((SCRATCH_GAIN * 0.125) / RECORD_TURNS_PER_SEC, 3);
     for (let i = 1; i <= 5; i++) rig.frame(rocking(up + Math.PI / 4 - (i / 5) * (Math.PI / 2))); // back past the start
-    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(-0.125 / RECORD_TURNS_PER_SEC, 3);
+    expect(scratches().at(-1)!.offsetSec).toBeCloseTo((SCRATCH_GAIN * -0.125) / RECORD_TURNS_PER_SEC, 3);
   });
 
-  it('moving in an arc turns the record: a quarter turn forward, then back, like a real deck', () => {
+  it('moving in an arc turns the record: a quarter turn of the hand forward, then back', () => {
     const start = { x: 0.3, y: 0.6 };
     const R = SCRATCH_VIRTUAL_RADIUS;
     const c = { x: start.x, y: start.y + R }; // the invisible record's center
@@ -186,22 +187,37 @@ describe('open-palm controls', () => {
     rest(start, SCRATCH_ARM_MS + 2 * FRAME_MS);
     // Fast: a quarter turn clockwise in 4 frames (~130 ms), then back past the start.
     for (let i = 1; i <= 4; i++) rig.frame(palm('Right', onArc(22.5 * i)));
-    const quarter = 0.25 / RECORD_TURNS_PER_SEC; // 0.45 s
+    const quarter = (SCRATCH_GAIN * 0.25) / RECORD_TURNS_PER_SEC;
     expect(scratches().at(-1)!.offsetSec).toBeCloseTo(quarter, 3);
     for (let i = 1; i <= 6; i++) rig.frame(palm('Right', onArc(90 - 22.5 * i)));
     expect(scratches().at(-1)!.offsetSec).toBeCloseTo(-0.5 * quarter, 3);
   });
 
-  it('on a record, the hand turns that record around its own center', () => {
+  it('where the record is drawn does not matter: a palm over it turns the same wheel as anywhere', () => {
     const pl = rig.controller.platters[0]!;
-    const rim = (deg: number) => {
+    const over = { x: pl.position.x + (pl.radius * 0.8) / ASPECT, y: pl.position.y }; // on its rim
+    rest(over, SCRATCH_ARM_MS + 2 * FRAME_MS);
+    rig.frame(palm('Right', { x: over.x + 0.05 / ASPECT, y: over.y }));
+    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(sideways(0.05), 5);
+  });
+
+  it('turning the open palm like a steering wheel: a quarter turn right = SCRATCH_GAIN quarter turns forward', () => {
+    const p = { x: 0.3, y: 0.6 };
+    const R = SCRATCH_VIRTUAL_RADIUS;
+    const c = { x: p.x, y: p.y + R };
+    const up = -Math.PI / 2;
+    // On a wheel the hand both swings around the center and turns with it.
+    const wheel = (deg: number, phase: GesturePhase = 'held') => {
       const a = (deg * Math.PI) / 180;
-      const r = pl.radius * 0.8;
-      return { x: pl.position.x + (Math.sin(a) * r) / ASPECT, y: pl.position.y - Math.cos(a) * r };
+      return { ...palm('Right', { x: c.x + (Math.sin(a) * R) / ASPECT, y: c.y - Math.cos(a) * R }, phase), roll: up + a };
     };
-    rest(rim(-30), SCRATCH_ARM_MS + 2 * FRAME_MS);
-    for (let i = 1; i <= 6; i++) rig.frame(palm('Right', rim(-30 + 10 * i)));
-    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(60 / 360 / RECORD_TURNS_PER_SEC, 3);
+    rig.frame(wheel(0, 'start'));
+    for (let t = 0; t <= SCRATCH_ARM_MS + FRAME_MS; t += FRAME_MS) rig.frame(wheel(0));
+    for (let i = 1; i <= 6; i++) rig.frame(wheel(15 * i));
+    const quarter = (SCRATCH_GAIN * 0.25) / RECORD_TURNS_PER_SEC;
+    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(quarter, 3); // not double counted
+    for (let i = 1; i <= 12; i++) rig.frame(wheel(90 - 15 * i));
+    expect(scratches().at(-1)!.offsetSec).toBeCloseTo(-quarter, 3);
   });
 
   it('fingers hanging down, or a hand that is not an open palm, does not scratch', () => {

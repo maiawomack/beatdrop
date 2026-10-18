@@ -28,6 +28,8 @@ const PLAYHEAD_SPEED = 0.25;
 const FLASH_MS = 380;
 /** Motion trail length (frames). */
 const TRAIL = 6;
+/** Deck fader bars' opacity while no hand is on or near them. */
+const BAR_IDLE_ALPHA = 0.8;
 
 interface VisualState {
   hover: number;
@@ -77,6 +79,8 @@ type RGB = [number, number, number];
  *   silent    dimmed and desaturated (muted, or another stem is soloed)
  */
 export class WaveformRenderer {
+  /** Opacity of the object being drawn (dim idle fader bars). */
+  private dim = 1;
   private visuals = new Map<string, VisualState>();
   private peaks = new Float32Array(SAMPLES);
   private filterSupported: boolean | null = null;
@@ -108,6 +112,10 @@ export class WaveformRenderer {
     entries.sort((a, b) => a.vis.grab - b.vis.grab);
 
     for (const { obj, vis } of entries) {
+      // Deck fader bars stay dim in the background until a hand is on or near one.
+      this.dim = obj.vertical ? BAR_IDLE_ALPHA + (1 - BAR_IDLE_ALPHA) * Math.max(vis.focus, vis.hover) : 1;
+      ctx.save();
+      ctx.globalAlpha = this.dim;
       const frame = this.bodyFrame(ctx, obj, vis);
       if (!this.source.peaks(obj.id, this.peaks, t)) this.peaks.fill(0.05);
       this.shapeForFilter(obj.audio.filter);
@@ -122,7 +130,9 @@ export class WaveformRenderer {
       if (obj.twist !== null) this.drawTwistDial(ctx, obj);
       if (LEVEL_HANDLE_ENABLED) this.drawLevelHandle(ctx, obj, frame, vis);
       if (obj.stretch) this.drawStretchNodes(ctx, obj, frame);
+      ctx.restore();
     }
+    this.dim = 1;
   }
 
   private animate(obj: HoloObject, timeMs: number): VisualState {
@@ -269,7 +279,7 @@ export class WaveformRenderer {
     const engaged = Math.max(vis.hover, vis.grab, vis.intent);
 
     ctx.save();
-    ctx.globalAlpha = (1 - 0.55 * vis.silent) * (1 - 0.3 * vis.recede) * (1 - vis.ret);
+    ctx.globalAlpha = this.dim * (1 - 0.55 * vis.silent) * (1 - 0.3 * vis.recede) * (1 - vis.ret);
     ctx.translate(f.cx, f.cy);
     ctx.rotate(f.angle);
 
@@ -575,7 +585,7 @@ export class WaveformRenderer {
     ctx.translate(f.cx, f.cy);
     ctx.rotate(f.angle);
     ctx.translate(x, y);
-    ctx.globalAlpha = alpha * (1 - 0.5 * vis.silent);
+    ctx.globalAlpha = this.dim * alpha * (1 - 0.5 * vis.silent);
     const scale = 1 + 0.15 * hover + (held ? 0.25 : 0);
     ctx.scale(scale, scale);
 
@@ -730,7 +740,8 @@ export class WaveformRenderer {
       ctx.fill();
       ctx.restore();
     }
-    if (active) {
+    // Lying stems show their volume while it's set; bars don't (their fill and handle show it).
+    if (active && !obj.vertical) {
       const fs = Math.max(u * 12, H * 0.22);
       ctx.save();
       ctx.font = `700 ${fs}px ui-monospace, "SF Mono", Menlo, monospace`;
@@ -846,7 +857,7 @@ export class WaveformRenderer {
     ctx.save();
     ctx.translate(f.cx, f.cy);
     ctx.rotate(f.angle);
-    ctx.globalAlpha = (0.55 + 0.45 * Math.max(active, vis.hover)) * (1 - 0.4 * vis.silent);
+    ctx.globalAlpha = this.dim * (0.55 + 0.45 * Math.max(active, vis.hover)) * (1 - 0.4 * vis.silent);
 
     // Track.
     ctx.lineCap = 'round';

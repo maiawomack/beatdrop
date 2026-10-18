@@ -76,8 +76,13 @@ const LIFT_DOWN_ON = 0.5;
 const LIFT_DOWN_OFF = 0.2;
 /** Ratio fed to the lift detector when the hand isn't pointing down. */
 const NOT_LIFT = 1.5;
-/** Fingertips bunched for the lift pose. */
+/** The lift pose's fingertips (its point and direction). */
 const LIFT_TIPS = [LM.THUMB_TIP, LM.INDEX_TIP, LM.MIDDLE_TIP] as const;
+/**
+ * Fingertips that must be together for the lift pose: the fingers hanging down side by side.
+ * The thumb is left out, so it counts whether the thumb pinches the fingertips or is tucked away.
+ */
+const LIFT_TOGETHER_TIPS = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP] as const;
 /**
  * Lift pose reach: how far the index and middle fingertips extend along the wrist ->
  * knuckles direction, in wrist-to-knuckle lengths. The lift pose reaches well past the
@@ -87,6 +92,13 @@ const LIFT_TIPS = [LM.THUMB_TIP, LM.INDEX_TIP, LM.MIDDLE_TIP] as const;
  */
 const LIFT_REACH_ON = 1.3;
 const LIFT_REACH_OFF = 1.15;
+/**
+ * Or the fingers are straight but bent down at the knuckles (wrist up beside the knuckles,
+ * fingers hanging): knuckle -> fingertip length, in wrist-to-knuckle lengths. Straight
+ * fingers are ~0.85-1; a fist's fingertips curl back to the palm (< ~0.5).
+ */
+const LIFT_EXTEND_ON = 0.72;
+const LIFT_EXTEND_OFF = 0.62;
 /** Palm-down flatness (|vertical component of the palm normal|): engage above ON, stay until below OFF. */
 const FLAT_ON = 0.7;
 const FLAT_OFF = 0.5;
@@ -466,10 +478,12 @@ export class GestureProcessor {
     const pts = world.length >= 21 ? world : lms;
     const palm = dist3(pts[LM.WRIST], pts[LM.MIDDLE_MCP]);
     if (palm < 1e-6) return NOT_LIFT;
-    if (fingerReach(pts) < (active ? LIFT_REACH_OFF : LIFT_REACH_ON)) return NOT_LIFT; // curled: a fist
+    const reaches = fingerReach(pts) >= (active ? LIFT_REACH_OFF : LIFT_REACH_ON);
+    const straight = fingerExtension(pts) / palm >= (active ? LIFT_EXTEND_OFF : LIFT_EXTEND_ON);
+    if (!reaches && !straight) return NOT_LIFT; // curled: a fist
     let spread = 0;
-    for (let i = 0; i < LIFT_TIPS.length; i++) {
-      for (let j = i + 1; j < LIFT_TIPS.length; j++) spread = Math.max(spread, dist3(pts[LIFT_TIPS[i]], pts[LIFT_TIPS[j]]));
+    for (let i = 0; i < LIFT_TOGETHER_TIPS.length; i++) {
+      for (let j = i + 1; j < LIFT_TOGETHER_TIPS.length; j++) spread = Math.max(spread, dist3(pts[LIFT_TOGETHER_TIPS[i]], pts[LIFT_TOGETHER_TIPS[j]]));
     }
     return spread / palm;
   }
@@ -479,7 +493,10 @@ export class GestureProcessor {
    * 0.5 + the worst of
    *  - index not extended enough (tip-to-wrist vs knuckle-to-wrist, 3D)
    *  - ring / pinky not mostly curled
-   *  - the index not pointing roughly up the image
+   *  - the index not pointing clearly up the image (within ~50° of vertical), with its tip
+   *    well above the wrist (a hand at the chin with a finger along the face isn't one)
+   *  - the index hooked rather than straight, or not clearly further out than the ring and
+   *    pinky (a claw, all fingers hooked forward, is not fingers up)
    * The middle finger can be up or down. A clear pose is below 0.5; any
    * broken condition pushes it above.
    */
@@ -501,7 +518,14 @@ export class GestureProcessor {
     const up = len > 1e-6 ? -dy / len : 0; // 1 = straight up
     // Ring and pinky: the more curled of the two only has to be clearly curled, the other mostly.
     const curl = Math.max(Math.min(ring, pinky) - 1.35, Math.max(ring, pinky) - 1.55);
-    const worst = Math.max(1.45 - index, curl, 0.25 - up);
+    // Straight: knuckle -> tip distance vs the finger's length along its joints (5-6-7-8; 1 = straight).
+    const seg = dist3(pts[LM.INDEX_MCP], pts[6]) + dist3(pts[6], pts[7]) + dist3(pts[7], pts[LM.INDEX_TIP]);
+    const straight = seg > 1e-6 ? dist3(pts[LM.INDEX_MCP], pts[LM.INDEX_TIP]) / seg : 1;
+    const standsOut = index - Math.max(ring, pinky);
+    // The fingertip well above the wrist, in palm lengths (image).
+    const palm2d = aspectDistance(lms[LM.WRIST], lms[LM.MIDDLE_MCP], this.aspect);
+    const above = palm2d > 1e-6 ? (lms[LM.WRIST].y - tip.y) / palm2d : 0;
+    const worst = Math.max(1.45 - index, curl, 0.65 - up, 0.82 - straight, 0.3 - standsOut, 1.2 - above);
     return 0.5 + worst;
   }
 
@@ -647,6 +671,11 @@ function fingerReach(pts: Landmark[]): number {
     sum += ((t.x - w.x) * ax + (t.y - w.y) * ay + (t.z - w.z) * az) / len2;
   }
   return sum / 2;
+}
+
+/** Mean knuckle -> fingertip distance of the index and middle fingers (how straight they are). */
+function fingerExtension(pts: Landmark[]): number {
+  return (dist3(pts[LM.INDEX_MCP], pts[LM.INDEX_TIP]) + dist3(pts[LM.MIDDLE_MCP], pts[LM.MIDDLE_TIP])) / 2;
 }
 
 function gripRatio(world: Landmark[]): number {

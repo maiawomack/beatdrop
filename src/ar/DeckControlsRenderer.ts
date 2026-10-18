@@ -141,7 +141,7 @@ export class DeckControlsRenderer {
     ctx.globalAlpha = 1;
     ctx.font = `600 ${u * 10}px ui-monospace, "SF Mono", Menlo, monospace`;
     ctx.fillStyle = 'rgba(235,242,255,0.8)';
-    const text = held ? '◀ SCRATCH ▶' : pl.hover > 0.05 ? 'HOLD…' : 'OPEN PALM = SCRATCH';
+    const text = held ? '↺ SCRATCH ↻' : pl.hover > 0.05 ? 'HOLD…' : 'OPEN PALM ↻ = SCRATCH';
     ctx.globalAlpha = held || pl.hover > 0.05 ? 1 : 0.45;
     ctx.fillText(text, 0, r + u * 14);
     ctx.restore();

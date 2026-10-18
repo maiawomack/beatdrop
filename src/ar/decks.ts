@@ -16,9 +16,13 @@ import type { InteractionController } from './InteractionController';
 const CHANNEL_ORDER: ChannelKey[] = ['vocals', 'drums', 'bass', 'instrumental', 'full'];
 const EDGE_MARGIN = 0.04;
 /** Fader tracks stand on the bottom edge: size, spacing and bottom margin, view-height units. */
-const BAR_HALF = { x: 0.05, y: 0.28 };
-const FULL_HALF = { x: 0.065, y: 0.28 };
-const BAR_PITCH = 0.165;
+const BAR_HALF = { x: 0.036, y: 0.26 };
+const FULL_HALF = { x: 0.048, y: 0.26 };
+const BAR_PITCH = 0.21;
+/** Gap between deck A's bars and deck B's, at the middle of the screen (view-height units). */
+const CENTER_GAP = 0.2;
+/** Spacing the records and crossfader are laid out on (each deck's space at its side; wider than the bars). */
+const DECK_PITCH = 0.165;
 const BOTTOM_MARGIN = 0.035;
 
 /** Colors shared with the decks screen: stems keep one color everywhere; a full mix takes its deck's color. */
@@ -27,19 +31,25 @@ export function channelColor(deck: DeckId, channel: ChannelKey): string {
 }
 
 /** Width (view-height units) the full layout needs: two decks of four bars and a gap for the crossfader. */
-const LAYOUT_WIDTH = 2 * (EDGE_MARGIN + 4 * BAR_PITCH) + 0.25;
+const LAYOUT_WIDTH = 2 * (EDGE_MARGIN + 4 * DECK_PITCH) + 0.25;
 
 /** Shrinks bars, records and spacing sideways on narrow (e.g. portrait) frames so both decks fit. */
 export function layoutScale(aspect: number): number {
   return Math.min(1, aspect / LAYOUT_WIDTH);
 }
 
-/** Where a deck channel's bar stands. Bars run left to right in the decks screen's order on both sides. */
+/**
+ * Where a deck channel's bar stands: each deck's bars together near the middle of the screen
+ * (A just left of it, B just right, mirrored, a small gap between), away from the tempo lines
+ * at the edges. Bars run left to right in the decks screen's order on both sides.
+ */
 export function deckSlot(aspect: number, deck: DeckId, index: number, count: number): { position: Point2; halfSize: Point2 } {
   const k = layoutScale(aspect);
   const half = count > 1 ? BAR_HALF : FULL_HALF;
-  const fromEdge = k * (EDGE_MARGIN + BAR_PITCH / 2 + (deck === 'A' ? index : count - 1 - index) * BAR_PITCH);
-  const x = deck === 'A' ? fromEdge / aspect : 1 - fromEdge / aspect;
+  // Each deck's bars span at most 40% of the frame's width from the middle (clear of the edges).
+  const spread = Math.min(k, (0.4 * aspect) / (CENTER_GAP / 2 + 4 * BAR_PITCH));
+  const fromCenter = spread * (CENTER_GAP / 2 + BAR_PITCH / 2 + (deck === 'A' ? count - 1 - index : index) * BAR_PITCH);
+  const x = deck === 'A' ? 0.5 - fromCenter / aspect : 0.5 + fromCenter / aspect;
   return { position: { x, y: 1 - BOTTOM_MARGIN - half.y }, halfSize: { x: half.x * k, y: half.y } };
 }
 
@@ -53,10 +63,10 @@ export function channelLabel(deck: DeckId, channel: ChannelKey, title?: string |
 const PLATTER_RADIUS = 0.085;
 const PLATTER_Y = 0.2;
 
-/** The record above a deck's bars (scratch with an open palm). */
+/** The record above a deck's bars. Just a picture: an open palm anywhere on that side scratches it. */
 export function deckPlatter(aspect: number, deck: DeckId, barCount: number): Platter {
   const k = layoutScale(aspect);
-  const fromEdge = k * (EDGE_MARGIN + (Math.max(1, barCount) * BAR_PITCH) / 2);
+  const fromEdge = k * (EDGE_MARGIN + (Math.max(1, barCount) * DECK_PITCH) / 2);
   const x = deck === 'A' ? fromEdge / aspect : 1 - fromEdge / aspect;
   const radius = PLATTER_RADIUS * Math.max(0.7, k);
   return { deck, position: { x, y: PLATTER_Y }, radius, color: DECK_COLORS[deck], hover: 0, hand: null, offsetSec: 0 };
@@ -64,7 +74,7 @@ export function deckPlatter(aspect: number, deck: DeckId, barCount: number): Pla
 
 /** The open-palm crossfader zone: the space between the two decks' bars. */
 export function crossfadeZone(aspect: number): CrossfadeZone {
-  const x0 = (layoutScale(aspect) * (EDGE_MARGIN + 4 * BAR_PITCH) + 0.02) / aspect;
+  const x0 = (layoutScale(aspect) * (EDGE_MARGIN + 4 * DECK_PITCH) + 0.02) / aspect;
   return { x0, x1: 1 - x0, y0: 0.35, y1: 1, arming: 0, hand: null };
 }
 
@@ -84,8 +94,8 @@ export function syncPlatters(engine: AudioStateSource, interaction: InteractionC
     } else next.push(fresh);
   }
   interaction.platters = next;
-  // Each deck's tempo is a pulse at its screen edge (left = A, right = B); the controller
-  // moves it level with the hand there.
+  // Each deck's tempo is a line at its screen edge (left = A, right = B), where the decks
+  // screen's tempo fader has it.
   interaction.tempoStrips = next.map((pl) => {
     const existing = interaction.tempoStrips.find((s) => s.deck === pl.deck);
     if (existing) return existing;
@@ -109,12 +119,23 @@ export function deckPositions(aspect: number, ids: string[]): Map<string, Point2
  * stems), and keep full-mix labels showing the current song. Clips are
  * handled by syncClips.
  */
+/**
+ * Stem fader bars on the spatial screen (small, dim until a hand is near, each deck's bars
+ * close together near the middle). Set false to hide them: records, tempo, crossfader,
+ * scratch and build/drop don't need them.
+ */
+export const SHOW_STEM_BARS = true;
+
 export function syncDeckStems(
   engine: AudioStateSource,
   interaction: InteractionController,
   aspect: number,
   titleOf: (deck: DeckId) => string | null,
 ): void {
+  if (!SHOW_STEM_BARS) {
+    for (const obj of [...interaction.objects]) if (!obj.clipOf) interaction.removeObject(obj.id);
+    return;
+  }
   const ids = [...engine.stems.entries()].filter(([, s]) => !s.clipOf).map(([id]) => id);
   for (const obj of [...interaction.objects]) {
     if (!obj.clipOf && !ids.includes(obj.id)) interaction.removeObject(obj.id);

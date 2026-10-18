@@ -61,14 +61,13 @@ Position is **never** mapped to audio. Moving a stem only changes the layout.
 These rules keep gestures from triggering by mistake:
 
 - **Drop:**
-  - Only the lift pose builds. Detection lives in perception (`HandState.lift`, in `src/perception/gestures.ts`). The pose counts when the fingertips are bunched, meaning the thumb/index/middle spread is under 0.55 palm lengths, and the wrist → fingertips direction points down the image, and the index and middle fingers **reach** well past the knuckles (≥ 1.3 wrist-to-knuckle lengths along the hand). That last check keeps a **fist pointing down** (the tempo fist, fingers curled back behind the knuckles) from reading as the lift pose. Once engaged, the pose holds while the hand tilts. A fist never builds, and the lift pose never grabs stems.
+  - Only the lift pose builds. Detection lives in perception (`HandState.lift`, in `src/perception/gestures.ts`). The pose counts when the fingers hang **together** (index/middle/ring tips within 0.55 palm lengths; the thumb can pinch them or be tucked away), the wrist → fingertips direction points down the image, and the fingers aren't curled: either they **reach** well past the knuckles (≥ 1.3 wrist-to-knuckle lengths along the hand) or they're **straight but bent down at the knuckles** (knuckle → tip ≥ 0.72 palm lengths, e.g. wrist up beside the knuckles with the fingers hanging). That keeps a **fist pointing down** (the tempo fist, fingertips curled back to the palm) from reading as the lift pose. Once engaged, the pose holds while the hand tilts. A fist never builds, and the lift pose never grabs stems.
   - Only **letting go** drops, once the build is ≥ 0.25 (the label says BUILD). Below that, letting go cancels. Moving the hand down never drops by itself; to cancel, lower the hand (the build falls with it) and then let go.
-  - A hand that's **lost** while the build is up (raised out of the frame, or blurred by opening fast), or whose pose ends right at the top edge, never decides anything: the build **holds** (label: HOLDING). Back in the lift pose, the build carries on from the same level. Clearly open (an open palm for 0.2 s), that's letting go, so it drops. Visible but neither (fingers clipped by the edge), it keeps holding. Gone from the camera for 3 s, it cancels.
+  - A hand that's **lost** while the build is up (raised out of the frame, blurred by opening fast), or whose pose ends at the top edge, counts as **letting go**: past 0.25 it drops, below that it cancels. There's no holding.
   - **Pull length:** full build is 0.55 view heights above where the lift pose started. Starting high, it shortens (to 0.25 at least) so full build stays reachable 0.12 below the top of the frame.
   - Has a 1.5 s cooldown.
   - Fires at most once per grab.
 - **Build:** falls back at most 0.9/s, so dipping the hand just before letting go doesn't drain it.
-- **Losing the hand never drops by itself.** The build holds and waits for the hand (see above).
 - **Filter:** rate-limited to 4 per second, and it freezes while tracking is shaky. A one-frame glitch can't slam it.
 - **Loop choice:** only applies when you deliberately open your hand. Losing tracking cancels it.
 - **Locked stems:** a stem whose cap is being held can't be dragged by the other hand.
@@ -186,14 +185,14 @@ In dev builds, `window.__beatdrop` exposes `{ audio, interaction, stems }` for c
 
 **Build details.** A master-bus effect in `AudioEngine.applyBuild`, kept separate from the mix, following the hand's height continuously (raise slowly = slow build, quickly = fast build):
 
-- **High-pass:** two cascaded filters (24 dB/oct), 10 Hz → 900 Hz, so the kick and bass really leave. A little resonance at the cutoff adds tension without booming.
-- **Stereo:** the image narrows to 40% width, so the drop can snap it wide again.
+- **High-pass:** two cascaded filters (24 dB/oct), 10 Hz → 1.3 kHz, so the kick and bass really leave. Resonance at the cutoff whistles and strains as it climbs (high enough by then that it never booms).
+- **Stereo:** the image narrows to 25% width, so the drop can snap it wide again.
 - **Level:** the mix dips to 85%, so the drop lands louder without needing more headroom.
 - **Stems:** bass ducked by up to 85% and drums by up to 30%, on separate "perf" gain nodes.
 - **Echo wash:** repeats on the lead deck's dotted eighth (3/4 beat) when it has a tempo.
-- **Riser:** band-passed noise, 400 Hz → 8 kHz, swaying between the speakers faster as the build rises.
-- **Echo wash grows:** its feedback climbs from 0.4 to 0.68 and it brightens (3.5 → 7 kHz), then rings out long after the drop.
-- **Rhythmic gate:** from 60% build, the music chops in time with the snare roll (open on each hit, dipping for the second half of the step), up to 80% deep at the top.
+- **Riser:** band-passed noise, 400 Hz → 11 kHz, getting narrower and louder, swaying between the speakers faster as the build rises.
+- **Echo wash grows:** its feedback climbs from 0.4 to 0.72 and it brightens (3.5 → 7 kHz), then rings out long after the drop.
+- **Rhythmic gate:** from 50% build, the music chops in time with the snare roll (open on each hit, dipping for the second half of the step), up to 90% deep at the top.
 - **Snare roll:** from 35% build, a synthesized snare on the lead deck's beat grid that speeds up with the build (beats → 8ths → 16ths → 32nds) and gets louder and brighter. Scheduled sample-accurately 120 ms ahead. No beat grid, no roll: it never invents a tempo.
 
 All of it is `setTargetAtTime` automation (rise fast, fall gently), so there are no clicks. With nothing playing there's no build: pausing, a song ending, or loading a new song releases it, and cancels a drop that hasn't landed (roll and impact included).
@@ -219,16 +218,17 @@ The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared
 - **Loading songs:** `/` opens the song search (the library in `mp3/`). Enter loads deck A and Shift+Enter loads deck B. A song you load starts playing by itself if nothing else is.
 - **Holograms per deck:** each deck's stems are fader bars standing on the bottom edge of the screen, side by side, in the decks screen's order (Vocals, Drums, Bass, Inst) and its colours (`STEM_COLORS` from `src/decks/theme.ts`). Deck A is on the left and deck B on the right. A full mix (a song that hasn't been split) is one bar in its deck's colour, labelled with the song title.
   - **What a bar shows:** it fills from the bottom to its volume, and the waveform plays inside the filled part. A faint track shows the full range.
-  - **The only bar gesture for now:** **pinch** anywhere along a bar (or a little above it) and drag up or down. The drag is relative: the volume moves 1:1 with your hand from where it was (full track = full range), so you don't have to find the top of the fill, which sits near the bottom edge when the volume is low.
-    - Over a control (bar, record) a **pinch wins** over the lift pose and the open palm: reaching down to the bars with your fingers pointing down never starts a build or a scratch.
+  - **The only bar gesture for now:** **pinch at the top of a bar's fill** (thumb and index together, e.g. sideways like gripping the edge; a little above or below the line is fine, a pinch deep inside the bar does nothing) and slide up or down, with either hand. You can grip and pull in one motion: the bar is chosen where the pinch started, and the slide counts from there, even while the pinch is still arming (0.15 s). The top follows your hand 1:1 from where you grabbed it, gliding slightly behind (60 ms) so it moves smoothly instead of jittering. No volume text pops up: the fill and its handle show the level, and Monitor 1's fader moves with it.
+    - Over a bar a **pinch wins** over the lift pose and the open palm: reaching down to the bars with your fingers pointing down never starts a build or a scratch.
     - Fists don't grab bars (a fist is tempo, below).
 - **Fist = tempo** (see Tempo below). Fists don't do anything else on the bars.
   - **Removed from bars for now** (pinch gestures to come): tap to mute, twist to filter, loop and filter caps, two-hand stretch, blend/isolate, and clip pull-out. The controller code is still there for free-floating stems and clips.
-- **Records (scratch):** each loaded deck has a record above its bars, in the deck's colour, turning at 33⅓ rpm with the real playback position.
-  - **To scratch:** hold an **open palm** anywhere (fingers up or sideways, not hanging down), **facing the camera and still**, for about 0.45 s, then rock it back and forth. Moving restarts the hold, and a palm within 1.2 s of a lift pose or a drop never arms, so reaching for a drink or opening the hand to drop doesn't scratch. You don't need to be on a record: the left half of the screen scratches deck A, the right half deck B. Pinching a record also works.
+- **Records (scratch):** each loaded deck has a record above where its bars go, in the deck's colour, turning clockwise at 33⅓ rpm like the decks screen's records with the real playback position. The record is only a picture: touching, tapping or pinching it does nothing.
+  - **To scratch:** hold an **open palm** anywhere (fingers up or sideways, not hanging down), **facing the camera and still**, for about 0.3 s, then **turn it like a steering wheel**. Moving restarts the hold, and a palm within 1.2 s of a lift pose or a drop never arms, so reaching for a drink or opening the hand to drop doesn't scratch. Where your hand is doesn't matter beyond the side: the left half of the screen scratches deck A, the right half deck B.
     - **What it follows:** whichever arc the hand makes each frame, with no double counting:
-      - **Tilting at the wrist,** like a windshield wiper, from the hand's in-plane angle `HandState.roll`.
-      - **The hand moving around a centre:** the record's centre when it's on a record, otherwise an invisible record just below where the hand started. Plain side-to-side counts as this.
+      - **The palm turning** (the wheel turning in your hand), from the hand's in-plane angle `HandState.roll`.
+      - **The hand swinging around the wheel's centre,** just below where the hand started (`SCRATCH_VIRTUAL_RADIUS`). Plain side-to-side counts as this.
+      - On a real wheel motion both happen by the same angle. The record turns **2.5× as far as your hand** (`SCRATCH_GAIN`), so a small twist of about 35° does what a quarter turn would.
     - **Mapping:** clockwise (as you see it) = forward. One full turn = one revolution at 33⅓ rpm (1.8 s of audio).
     - **How the audio follows the hand** (`src/audio/scratchVoice.ts`, an AudioWorklet with its own read head, so it really plays backwards):
       - The hand's speed comes from successive positions, extrapolated for up to 60 ms between camera frames.
@@ -238,23 +238,24 @@ The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared
       - **Sound:** level follows speed like a cartridge (a still record is silent). A speed-tracking low-pass prevents aliasing on fast scratches. Cubic interpolation.
     - **Both screens follow the scratch:** while a hand scratches a deck, `AudioEngine.getPositionSec()` reports the scratch position (what you hear), and the song keeps running underneath. So the decks screen's record (`src/decks/components/Vinyl.tsx`, which steers its spin animation from that position) and its waveform playhead turn with your hand, then carry on in time after you let go.
     - **Excluded:** fingers hanging down (the lift pose).
-  - **To let go:** close your hand, or lose tracking. A pinched record also lets go if you move well off it.
+  - **To let go:** close your hand, or lose tracking.
   - **Stays in time:** it's slip mode. The song keeps running underneath, so it carries on exactly where it would have been. Verified in headless Chrome: 0.00 s off.
   - **Engine side:** `SCRATCH_START` / `SCRATCH_MOVE` / `SCRATCH_END` (Task 1 additions), played through the AudioWorklet scratch voice. `getPositionSec()` reports the voice's real record position while scratching.
 - **Pinch** (held for about 0.15 s without closing into a fist) grabs what's under it:
-  - **a record:** scratch
   - **a bar (anywhere along it):** volume
   - **anywhere else:** nothing
 
   It keeps that target until the pinch opens.
-- **Crossfader:** a small A–B fader at the top centre, between the records. Hold **one or two fingers up** (☝ or ✌) for about 0.12 s anywhere, then slide sideways.
+- **Crossfader:** a small A–B fader at the top centre, between the records. Hold **one or two fingers up** (☝ or ✌) for about 0.3 s anywhere, then slide sideways. It's strict: the index has to be straight, point clearly up (within ~50° of vertical), have its tip well above the wrist (1.2 palm lengths), and stick out clearly further than the ring and pinky. So a claw (fingers hooked forward to grip a bar), a pinch, or a hand at your chin with a finger along your face never crossfade.
   - **The pose (forgiving):** the index is extended and roughly pointing up, the middle finger can be either way, and the ring and little fingers are mostly curled.
   - **Movement:** relative to where it started; 0.5 view-height of travel = A to B. Lowering the fingers lets go. It's the same crossfader as the decks screen's, through `SET_CROSSFADER`.
-- **Tempo:** close a **fist at the left or right edge** of the screen (the outer 15% of the width; left = deck A, right = deck B) and move it up (faster) or down (slower). The whole song (every stem) stretches together.
-  - **Movement:** relative to where the fist closed; 0.3 view-height of travel = ±16%, with a notch at ×1.00. Opening the hand keeps the tempo.
+- **Tempo:** close a **fist out to your side** (left = deck A, right = deck B) and move it up (faster) or down (slower). The whole song (every stem) stretches together.
+  - **Out to the side:** at least 2.5 of your apparent palm sizes from the middle of the screen (`tempoSideDistance`), so it adapts to distance. Up close it's near the screen edge; from across the room it's just beside you. It also always starts **beyond the outermost fader bar** (`tempoSideMin`): the bars' zone and the tempo zone meet at the bar's outer edge and never overlap. In front of your body a fist does nothing. This assumes you're roughly centred in the camera.
+  - **Movement:** the deck's tempo is a line on that screen edge, **always where Monitor 1's tempo fader cap is**: the same scale (2× at the top of the track, ×1.00 in the middle with the same snap, ½× at the bottom, evenly spaced in octaves; track = view y 0.12–0.88, `tempoLineY`). Closing the fist doesn't move it; the fist then moves the line from there, up by as much as the fist goes up (1:1 at arm's length, more from across the room where your reach looks smaller, `tempoReachGain`). Opening the hand keeps the tempo. A quick fist (under 0.15 s, not moving) changes nothing.
   - **Elsewhere:** a fist away from the edges never touches the tempo, and pinching never does.
-  - **Display:** no bars. When a hand is at an edge, a thin solid line in the deck's colour appears along that edge, level with the hand, **thickening on each beat** (so it quickens as you speed the song up), with `FIST ↕ TEMPO` beside it. While a fist holds the tempo, the line goes solid and shows `+3.2%` and `132.1 BPM`. No blur or glow. Monitor 1's tempo faders (and E/D, I/K) still work as before.
+  - **Display:** a thin deck-coloured line on the very screen edge that **thickens on each beat**, with `+3.2%` and `132.1 BPM` beside it while a fist holds it. A hand out to the side (no fist) shows it dimly with `FIST ↕ TEMPO`. Monitor 1's tempo faders (and E/D, I/K) still work as before, and the line follows them.
   - **Engine side:** it's the decks screen's tempo (`SET_PLAYBACK_RATE`), so her tempo fader moves too. It's turntable-style, so pitch follows.
+- **Stem bars are back, smaller and dimmer** (`SHOW_STEM_BARS` in `src/ar/decks.ts`): each deck's four bars stand close together near the middle of the screen, A just left of centre and B just right, mirrored with a small gap between, so they stay clear of the tempo lines at the edges, drawn at 80% opacity until a hand is on or near one (`BAR_IDLE_ALPHA` in `src/ar/WaveformRenderer.ts`). Records and crossfader keep their places. Hand gestures for them are next.
 - **No mute on this screen for now:** tapping does nothing and the 1–9 keys are gone. Stems muted on the decks screen still show MUTED.
 - **No wobble:** fader bars ignore the hand-drift effect and don't grow, squeeze or shiver. They react with glow and fill only.
 - **Narrow frames:** on portrait or narrow camera frames, bars, records and spacing shrink sideways so both decks fit.
