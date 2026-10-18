@@ -21,6 +21,14 @@ interface Props {
   onQueue(track: TrackInfo): void;
 }
 
+/** A finished split: the library entry it was for (if any), and its stems on the separator. */
+interface SplitResult {
+  knownId: string | null;
+  manifestUrl: string;
+  /** Track to load if the library doesn't list the stems. */
+  base: TrackInfo;
+}
+
 interface Job {
   name: string;
   progress: number;
@@ -105,22 +113,25 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
     input.current?.blur();
   };
 
-  /** Runs a separation, then loads whichever catalog entry now has its stems. */
-  const runSplit = async (name: string, work: (onProgress: (j: SeparationJob) => void) => Promise<string | null>) => {
+  /**
+   * Runs a separation, then loads the catalog entry that now has its stems. When the library
+   * doesn't list them (the deployed site: its library is on the host, the separator on this
+   * machine), it loads the stems straight from the separator instead.
+   */
+  const runSplit = async (name: string, work: (onProgress: (j: SeparationJob) => void) => Promise<SplitResult>) => {
     close();
     setJob({ name, progress: 0, error: null });
     try {
       let trackId: string | null = null;
-      const knownId = await work((j) => {
+      const { knownId, manifestUrl, base } = await work((j) => {
         trackId = j.trackId;
         setJob({ name, progress: j.progress, error: null });
       });
-      const tracks = await refresh();
+      const tracks = await refresh().catch(() => [] as TrackInfo[]);
       const match = knownId
         ? tracks.find((t) => t.id === knownId && t.stemsManifestUrl)
         : tracks.find((t) => trackId && stemsIdOf(t.stemsManifestUrl) === trackId);
-      if (!match) throw new Error('separated, but the stems did not show up in the library');
-      onLoad(match);
+      onLoad(match ?? { ...base, stemsManifestUrl: manifestUrl });
       setJob(null);
     } catch (err) {
       setJob({ name, progress: 0, error: err instanceof Error ? err.message : String(err) });
@@ -128,15 +139,21 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
   };
 
   const split = (track: TrackInfo) =>
-    void runSplit(track.title, async (onProgress) => {
-      await separateTrack(track, onProgress);
-      return track.id;
-    });
+    void runSplit(track.title, async (onProgress) => ({
+      knownId: track.id,
+      manifestUrl: await separateTrack(track, onProgress),
+      base: track,
+    }));
 
   const separateFile = (file: File) =>
     void runSplit(file.name, async (onProgress) => {
-      await separateAudio(file, { onProgress, saveToLibrary: true });
-      return null;
+      const manifestUrl = await separateAudio(file, { onProgress, saveToLibrary: true });
+      const title = file.name.replace(/\.[^.]+$/, '');
+      return {
+        knownId: null,
+        manifestUrl,
+        base: { id: `file-${stemsIdOf(manifestUrl) ?? title}`, title, artists: [], album: null, artworkUrl: null, durationMs: null, fileName: file.name, audioUrl: null, stemsManifestUrl: null, bpm: null },
+      };
     });
 
   useImperativeHandle(ref, () => ({ focus: () => input.current?.focus(), split, separateFile }));
