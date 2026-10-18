@@ -16,8 +16,14 @@ import {
 /** Default location when the stems folder is served from the app's public root. */
 export const DEFAULT_STEMS_INDEX_URL = '/stems/index.json';
 
-/** Decoders may round a resampled length differently; anything beyond this is a real mismatch. */
+/** Stems must decode to the same length as each other (rounding aside) to stay aligned. */
 const LENGTH_TOLERANCE_FRAMES = 2;
+/**
+ * How far the shared length may differ from the manifest. MP3 stems carry encoder
+ * padding that some decoders don't trim; every stem is padded identically, so they
+ * stay aligned with each other even when the total length is a few ms off.
+ */
+const MANIFEST_TOLERANCE_SEC = 0.1;
 
 export class StemLoadError extends Error {
   constructor(message: string, readonly trackId?: string, readonly stem?: StemId) {
@@ -73,24 +79,27 @@ export async function loadTrack(
   );
   signal?.throwIfAborted();
 
-  // Stems are written with identical frame counts; after the browser resamples to the
-  // context rate they must still match, or playback would drift apart.
+  // Stems are written with identical frame counts; after decoding (and resampling to the
+  // context rate) they must still match each other, or playback would drift apart.
+  const lengths = entries.map(([, buffer]) => buffer.length);
   const expected = Math.round((manifest.frames * ctx.sampleRate) / manifest.sampleRate);
-  for (const [stem, buffer] of entries) {
-    if (Math.abs(buffer.length - expected) > LENGTH_TOLERANCE_FRAMES) {
-      throw new StemLoadError(
-        `${stem} decoded to ${buffer.length} frames, expected ${expected}; re-run prepare_stems.py`,
-        manifest.id,
-        stem,
-      );
-    }
+  const shortest = Math.min(...lengths);
+  const mismatch = entries.find(([, buffer]) => buffer.length - shortest > LENGTH_TOLERANCE_FRAMES);
+  if (mismatch || Math.abs(shortest - expected) > MANIFEST_TOLERANCE_SEC * ctx.sampleRate) {
+    const [stem, buffer] = mismatch ?? entries[0]!;
+    throw new StemLoadError(
+      `${stem} decoded to ${buffer.length} frames, expected ${expected}; re-run prepare_stems.py`,
+      manifest.id,
+      stem,
+    );
   }
+  const length = Math.abs(shortest - expected) <= LENGTH_TOLERANCE_FRAMES ? expected : shortest;
 
   const buffers = {} as Record<StemId, AudioBuffer>;
   for (const [stem, buffer] of entries) {
-    buffers[stem] = buffer.length === expected ? buffer : withLength(ctx, buffer, expected);
+    buffers[stem] = buffer.length === length ? buffer : withLength(ctx, buffer, length);
   }
-  return { manifest, manifestUrl: url, buffers, length: expected, duration: expected / ctx.sampleRate };
+  return { manifest, manifestUrl: url, buffers, length, duration: length / ctx.sampleRate };
 }
 
 export function fetchWaveform(

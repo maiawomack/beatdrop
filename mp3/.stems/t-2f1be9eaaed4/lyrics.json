@@ -1,0 +1,321 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 35701489,
+ "matchedTitle": "Dancing In The Dark",
+ "matchedArtist": "Rihanna",
+ "matchedDurationSec": 223.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 0.4,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 1.2,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 4.03,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 5.18,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 8.15,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 9.13,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 12.41,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 13.42,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 16.99,
+   "text": "Underdogs, dance in the middle of the night"
+  },
+  {
+   "timeSec": 21.17,
+   "text": "Can see the night skies in the mirror of your eyes"
+  },
+  {
+   "timeSec": 25.25,
+   "text": "If you don't dance, make sure you got the rhythm"
+  },
+  {
+   "timeSec": 29.64,
+   "text": "Make sure that your heartbeat beats with the rhythm"
+  },
+  {
+   "timeSec": 33.82,
+   "text": "I wanna run wild in the middle of the night"
+  },
+  {
+   "timeSec": 37.85,
+   "text": "Right under the moon, bodies glowing in the night"
+  },
+  {
+   "timeSec": 42.1,
+   "text": "Nothing in between our skins but the rhythm"
+  },
+  {
+   "timeSec": 46.28,
+   "text": "Make sure that your heartbeat beats with the rhythm"
+  },
+  {
+   "timeSec": 50.56,
+   "text": "The night time is the right time"
+  },
+  {
+   "timeSec": 59.08,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 61.64,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 63.28,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 65.92,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 67.55,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 70.16,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 71.42,
+   "text": "Oh, oh, oh, dancing in the dark"
+  },
+  {
+   "timeSec": 75.75,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 78.45,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 80.13,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 82.58,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 84.24,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 86.79,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 88.32,
+   "text": "Oh, oh, oh, dancing in the dark"
+  },
+  {
+   "timeSec": 92.54,
+   "text": "Underdogs dance in the middle of the night"
+  },
+  {
+   "timeSec": 96.18,
+   "text": "Out here with the stars like the creatures of the night"
+  },
+  {
+   "timeSec": 100.55,
+   "text": "If you don't dance, make sure you got the rhythm"
+  },
+  {
+   "timeSec": 104.73,
+   "text": "Make sure that your heartbeat beats with the rhythm"
+  },
+  {
+   "timeSec": 108.93,
+   "text": "I wanna dance, dance in the middle of the night"
+  },
+  {
+   "timeSec": 113.08,
+   "text": "Can see the night skies in the mirror of your eyes"
+  },
+  {
+   "timeSec": 117.35,
+   "text": "If you don't dance, make sure you got the rhythm"
+  },
+  {
+   "timeSec": 121.35,
+   "text": "Make sure that your heart beats"
+  },
+  {
+   "timeSec": 124.17,
+   "text": "Beats with the rhythm"
+  },
+  {
+   "timeSec": 125.82,
+   "text": "The night time is the right time"
+  },
+  {
+   "timeSec": 134.11,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 136.92,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 138.64,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 141.06,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 142.72,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 145.32,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 146.63,
+   "text": "Oh, oh, oh, dancing in the dark"
+  },
+  {
+   "timeSec": 150.91,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 153.68,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 155.02,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 157.63,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 159.33,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 161.98,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 163.25,
+   "text": "Oh, oh, oh, dancing in the dark"
+  },
+  {
+   "timeSec": 167.59,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 170.64,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 171.99,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 175.27,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 176.18,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 179.28,
+   "text": "Come on"
+  },
+  {
+   "timeSec": 180.2,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 183.93,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 186.97,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 188.46,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 191.16,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 192.81,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 195.34,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 196.62,
+   "text": "Oh, oh, oh, dancin' in the dark"
+  },
+  {
+   "timeSec": 200.97,
+   "text": "I wanna dance in the dark"
+  },
+  {
+   "timeSec": 203.71,
+   "text": "And never stop"
+  },
+  {
+   "timeSec": 205.35,
+   "text": "We're gonna light up the night"
+  },
+  {
+   "timeSec": 207.78,
+   "text": "Like shooting stars"
+  },
+  {
+   "timeSec": 209.33,
+   "text": "Whenever you hear the sound"
+  },
+  {
+   "timeSec": 211.79,
+   "text": "Don't be alarmed"
+  },
+  {
+   "timeSec": 213.45,
+   "text": "Oh, oh, oh, dancing in the dark"
+  },
+  {
+   "timeSec": 216.72,
+   "text": ""
+  }
+ ],
+ "plain": "Come on\nI wanna dance in the dark\nCome on\nWe're gonna light up the night\nCome on\nI wanna dance in the dark\nCome on\nWe're gonna light up the night\n\nUnderdogs, dance in the middle of the night\nCan see the night skies in the mirror of your eyes\nIf you don't dance, make sure you got the rhythm\nMake sure that your heartbeat beats with the rhythm\n\nI wanna run wild in the middle of the night\nRight under the moon, bodies glowing in the night\nNothing in between our skins but the rhythm\nMake sure that your heartbeat beats with the rhythm\n\nThe night time is the right time\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancing in the dark\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancing in the dark\n\nUnderdogs dance in the middle of the night\nOut here with the stars like the creatures of the night\nIf you don't dance, make sure you got the rhythm\nMake sure that your heartbeat beats with the rhythm\n\nI wanna dance, dance in the middle of the night\nCan see the night skies in the mirror of your eyes\nIf you don't dance, make sure you got the rhythm\nMake sure that your heart beats\nBeats with the rhythm\n\nThe night time is the right time\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancing in the dark\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancing in the dark\n\nI wanna dance in the dark\nCome on\nWe're gonna light up the night\nCome on\nI wanna dance in the dark\nCome on\nWe're gonna light up the night\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancin' in the dark\n\nI wanna dance in the dark\nAnd never stop\nWe're gonna light up the night\nLike shooting stars\nWhenever you hear the sound\nDon't be alarmed\nOh, oh, oh, dancing in the dark"
+}

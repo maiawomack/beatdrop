@@ -1,0 +1,345 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 37487597,
+ "matchedTitle": "I Wanna Dance With Somebody",
+ "matchedArtist": "Whitney Houston",
+ "matchedDurationSec": 291.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 5.82,
+   "text": "Huh, yeah, woo, hey, huh"
+  },
+  {
+   "timeSec": 19.93,
+   "text": "Ooh yeah, uh huh, yeah"
+  },
+  {
+   "timeSec": 27.81,
+   "text": "I want to dance"
+  },
+  {
+   "timeSec": 32.77,
+   "text": "Clock strikes upon the hour"
+  },
+  {
+   "timeSec": 36.22,
+   "text": "And the sun begins to fade"
+  },
+  {
+   "timeSec": 40.63,
+   "text": "Still enough time to figure out"
+  },
+  {
+   "timeSec": 44.03,
+   "text": "How to chase my blues away"
+  },
+  {
+   "timeSec": 48.48,
+   "text": "I've done alright up 'til now"
+  },
+  {
+   "timeSec": 51.95,
+   "text": "It's the light of day that shows me how"
+  },
+  {
+   "timeSec": 56.39,
+   "text": "And when the night falls"
+  },
+  {
+   "timeSec": 59.44,
+   "text": "The loneliness calls"
+  },
+  {
+   "timeSec": 63.09,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 67.67,
+   "text": "I wanna feel the heat with somebody"
+  },
+  {
+   "timeSec": 71.58,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 75.78,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 79.5,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 83.53,
+   "text": "I wanna feel the heat with somebody"
+  },
+  {
+   "timeSec": 87.07,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 91.86,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 99.46,
+   "text": "I've been in love and lost my senses"
+  },
+  {
+   "timeSec": 103.01,
+   "text": "Spinning through the town"
+  },
+  {
+   "timeSec": 107.44,
+   "text": "Sooner or later the fever ends"
+  },
+  {
+   "timeSec": 111.22,
+   "text": "And I wind up feeling down"
+  },
+  {
+   "timeSec": 115.27,
+   "text": "I need a man who'll take a chance"
+  },
+  {
+   "timeSec": 119.01,
+   "text": "On a love that burns hot enough to last"
+  },
+  {
+   "timeSec": 122.95,
+   "text": "So when the night falls"
+  },
+  {
+   "timeSec": 126.28,
+   "text": "My lonely heart calls"
+  },
+  {
+   "timeSec": 129.63,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 133.79,
+   "text": "I wanna feel the heat with somebody"
+  },
+  {
+   "timeSec": 137.45,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 142.37,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 146.31,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 150.48,
+   "text": "I wanna feel the heat"
+  },
+  {
+   "timeSec": 154.68,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 158.59,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 162.11,
+   "text": "Somebody who"
+  },
+  {
+   "timeSec": 163.6,
+   "text": "Somebody who"
+  },
+  {
+   "timeSec": 165.72,
+   "text": "Somebody who love me"
+  },
+  {
+   "timeSec": 169.79,
+   "text": "Somebody who"
+  },
+  {
+   "timeSec": 171.56,
+   "text": "Somebody who"
+  },
+  {
+   "timeSec": 173.62,
+   "text": "To hold me in his arms"
+  },
+  {
+   "timeSec": 177.63,
+   "text": "I need a man who'll take a chance"
+  },
+  {
+   "timeSec": 181.35,
+   "text": "On a love that burns hot enough to last"
+  },
+  {
+   "timeSec": 185.5,
+   "text": "So when the night falls"
+  },
+  {
+   "timeSec": 188.51,
+   "text": "My lonely heart calls"
+  },
+  {
+   "timeSec": 192.24,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 196.1,
+   "text": "I wanna feel the heat with somebody"
+  },
+  {
+   "timeSec": 200.04,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 205.02,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 208.47,
+   "text": "Oh! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 212.71,
+   "text": "I wanna feel the heat with somebody"
+  },
+  {
+   "timeSec": 216.63,
+   "text": "Yeah! I wanna dance with somebody"
+  },
+  {
+   "timeSec": 220.42,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 224.73,
+   "text": "Uh- huh"
+  },
+  {
+   "timeSec": 227.31,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 228.14,
+   "text": "Come on, baby, ha, ha"
+  },
+  {
+   "timeSec": 231.38,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 233.0,
+   "text": "Woo, yeah"
+  },
+  {
+   "timeSec": 235.88,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 236.28,
+   "text": "Now get with this, ha, ha, ha"
+  },
+  {
+   "timeSec": 238.65,
+   "text": "Whoa, oh, oh"
+  },
+  {
+   "timeSec": 240.24,
+   "text": "Don't you wanna dance(dance) with me baby?"
+  },
+  {
+   "timeSec": 244.29,
+   "text": "Don't you wanna dance(dance) with me boy?"
+  },
+  {
+   "timeSec": 248.24,
+   "text": "Don't you wanna dance(dance) with me baby?"
+  },
+  {
+   "timeSec": 253.91,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 256.49,
+   "text": "Don't you wanna dance?"
+  },
+  {
+   "timeSec": 257.35,
+   "text": "Say you wanna dance?"
+  },
+  {
+   "timeSec": 258.42,
+   "text": "Don't you wanna dance?"
+  },
+  {
+   "timeSec": 259.72,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 260.75,
+   "text": "Don't you wanna dance?"
+  },
+  {
+   "timeSec": 261.88,
+   "text": "Say you wanna dance?"
+  },
+  {
+   "timeSec": 262.84,
+   "text": "Don't you wanna dance?"
+  },
+  {
+   "timeSec": 264.08,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 264.94,
+   "text": "Don't you wanna dance?"
+  },
+  {
+   "timeSec": 265.94,
+   "text": "Say you wanna dance?"
+  },
+  {
+   "timeSec": 267.1,
+   "text": "Uh- huh"
+  },
+  {
+   "timeSec": 268.19,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 269.95,
+   "text": "With somebody who loves me"
+  },
+  {
+   "timeSec": 275.64,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 279.61,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 281.93,
+   "text": "(Dance)"
+  },
+  {
+   "timeSec": 284.66,
+   "text": "Hey, baby"
+  },
+  {
+   "timeSec": 286.15,
+   "text": ""
+  }
+ ],
+ "plain": "Huh, yeah, woo, hey, huh\nOoh yeah, uh huh, yeah\nI want to dance\nClock strikes upon the hour\nAnd the sun begins to fade\nStill enough time to figure out\nHow to chase my blues away\nI've done alright up 'til now\nIt's the light of day that shows me how\nAnd when the night falls\nThe loneliness calls\nOh! I wanna dance with somebody\nI wanna feel the heat with somebody\nYeah! I wanna dance with somebody\nWith somebody who loves me\nOh! I wanna dance with somebody\nI wanna feel the heat with somebody\nYeah! I wanna dance with somebody\nWith somebody who loves me\nI've been in love and lost my senses\nSpinning through the town\nSooner or later the fever ends\nAnd I wind up feeling down\nI need a man who'll take a chance\nOn a love that burns hot enough to last\nSo when the night falls\nMy lonely heart calls\nOh! I wanna dance with somebody\nI wanna feel the heat with somebody\nYeah! I wanna dance with somebody\nWith somebody who loves me\nOh! I wanna dance with somebody\nI wanna feel the heat\nYeah! I wanna dance with somebody\nWith somebody who loves me\nSomebody who\nSomebody who\nSomebody who love me\nSomebody who\nSomebody who\nTo hold me in his arms\nI need a man who'll take a chance\nOn a love that burns hot enough to last\nSo when the night falls\nMy lonely heart calls\nOh! I wanna dance with somebody\nI wanna feel the heat with somebody\nYeah! I wanna dance with somebody\nWith somebody who loves me\nOh! I wanna dance with somebody\nI wanna feel the heat with somebody\nYeah! I wanna dance with somebody\nWith somebody who loves me\nUh- huh\n(Dance)\nCome on, baby, ha, ha\n(Dance)\nWoo, yeah\n(Dance)\nNow get with this, ha, ha, ha\nWhoa, oh, oh\nDon't you wanna dance(dance) with me baby?\nDon't you wanna dance(dance) with me boy?\nDon't you wanna dance(dance) with me baby?\nWith somebody who loves me\nDon't you wanna dance?\nSay you wanna dance?\nDon't you wanna dance?\n(Dance)\nDon't you wanna dance?\nSay you wanna dance?\nDon't you wanna dance?\n(Dance)\nDon't you wanna dance?\nSay you wanna dance?\nUh- huh\n(Dance)\nWith somebody who loves me\n(Dance)\n(Dance)\n(Dance)\nHey, baby"
+}

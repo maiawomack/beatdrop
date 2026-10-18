@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-219e390568f7",
+  "title": "On The Floor",
+  "artist": "Jennifer Lopez",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 12562620,
+  "durationSec": 284.8667,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 284.8667,
+  "bpm": 130.0,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.1364,
+  "gainDb": -0.0,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.61,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.78,
+      "rmsDb": -21.59
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.78,
+      "rmsDb": -20.05
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.99,
+      "rmsDb": -22.51
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.78,
+      "rmsDb": -22.02
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

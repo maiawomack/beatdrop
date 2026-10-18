@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-9c19f6d72943",
+  "title": "Queen of Mean",
+  "artist": "Sarah Jeffery",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8352424,
+  "durationSec": 189.3974,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 189.3974,
+  "bpm": 116.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.3251,
+  "gainDb": -1.85,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.34,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -1.93,
+      "rmsDb": -18.74
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -1.93,
+      "rmsDb": -20.09
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -9.02,
+      "rmsDb": -21.83
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -5.48,
+      "rmsDb": -24.14
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

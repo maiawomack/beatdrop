@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-e40c2784ec73",
+  "title": "Rotten to the Core",
+  "artist": "Dove Cameron",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 7147140,
+  "durationSec": 162.0667,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 162.0667,
+  "bpm": 128.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.0958,
+  "gainDb": -2.46,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.5,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.54,
+      "rmsDb": -20.33
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.54,
+      "rmsDb": -19.88
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.19,
+      "rmsDb": -20.36
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.72,
+      "rmsDb": -27.05
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

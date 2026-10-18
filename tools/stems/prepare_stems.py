@@ -62,7 +62,15 @@ STEM_IDS = ("vocals", "drums", "bass", "instrumental")
 DEMUCS_TO_STEM = {"vocals": "vocals", "drums": "drums", "bass": "bass", "other": "instrumental"}
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUT = REPO_ROOT / "public" / "stems"
+# Stems live inside the music library (hidden folder), so they're committed with the
+# songs and teammates get them on pull. The library scanner skips dot-folders.
+LIBRARY_DIR = REPO_ROOT / "mp3"
+DEFAULT_OUT = LIBRARY_DIR / ".stems"
+# MP3 keeps a song's four stems around 15 MB (WAV would be ~145 MB). Chrome and Safari
+# both decode it to the exact original length, so stems stay sample-aligned.
+DEFAULT_FORMAT = "mp3"
+FORMATS = ("mp3", "flac", "wav")
+MP3_QUALITY = 0.4  # libsndfile compression level; ~160 kbps VBR
 DEFAULT_MODEL = "htdemucs"
 MIN_SONG_SEC = 5.0
 DEFAULT_SAMPLE_RATE = 44100
@@ -127,7 +135,10 @@ def resample(x: np.ndarray, sr: int, target: int) -> np.ndarray:
 
 
 def write_audio(path: Path, x: np.ndarray, sample_rate: int, fmt: str) -> None:
-    sf.write(str(path), x, sample_rate, format=fmt.upper(), subtype="PCM_16")
+    if fmt == "mp3":
+        sf.write(str(path), x, sample_rate, format="MP3", subtype="MPEG_LAYER_III", compression_level=MP3_QUALITY)
+    else:
+        sf.write(str(path), x, sample_rate, format=fmt.upper(), subtype="PCM_16")
 
 
 def to_mono(x: np.ndarray) -> np.ndarray:
@@ -326,7 +337,7 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
 
-    ext = "flac" if fmt == "flac" else "wav"
+    ext = fmt
     stem_entries = {}
     for sid in STEM_IDS:
         filename = f"{sid}.{ext}"
@@ -463,17 +474,28 @@ def run_demucs(input_wav: Path, out_dir: Path, *, model: str, device: str, demuc
     return out_dir / model / input_wav.stem
 
 
+def parse_name(name: str) -> tuple[str, str | None]:
+    """'Artist A, Artist B - Title' -> ('Title', 'Artist A, Artist B'). Mirrors parseName() in
+    server/audioLibrary.ts so titles (and lyrics lookups) match what the app shows."""
+    if " - " not in name:
+        return name.strip(), None
+    artist_part, title = name.split(" - ", 1)
+    artists = [a.strip() for a in re.split(r"\s*(?:,|&| x | feat\.? | ft\.? )\s*", artist_part, flags=re.I) if a.strip()]
+    return title.strip(), ", ".join(artists) or None
+
+
 def song_metadata(song: Path, title: str | None, artist: str | None,
                   fallback_title: str | None = None) -> tuple[str, str]:
-    """Explicit values win, then the file's tags, then the file name."""
+    """Explicit values win, then the file's tags, then an "Artist - Title" file name."""
     tags = lyrics_lookup.read_tags(song)
-    return (title or tags["title"] or fallback_title or song.stem,
-            artist or tags["artist"] or "Unknown Artist")
+    name_title, name_artist = parse_name(fallback_title or song.stem)
+    return (title or tags["title"] or name_title,
+            artist or tags["artist"] or name_artist or "Unknown Artist")
 
 
 def separate_file(song: Path, *, out_root: Path, track_id: str, title: str | None = None,
                   artist: str | None = None, fallback_title: str | None = None,
-                  sample_rate: int = DEFAULT_SAMPLE_RATE, fmt: str = "wav", start: float | None = None,
+                  sample_rate: int = DEFAULT_SAMPLE_RATE, fmt: str = DEFAULT_FORMAT, start: float | None = None,
                   duration: float | None = None, bpm: float | None = None, first_beat: float | None = None,
                   model: str = DEFAULT_MODEL, device: str = "cpu", demucs_python: str | None = None,
                   target_rms_db: float = DEFAULT_TARGET_RMS_DB, ceiling_db: float = DEFAULT_CEILING_DB,
@@ -661,7 +683,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help=f"output root (default: {DEFAULT_OUT})")
     parser.add_argument("--sample-rate", type=int, default=DEFAULT_SAMPLE_RATE)
-    parser.add_argument("--format", choices=("wav", "flac"), default="wav")
+    parser.add_argument("--format", choices=FORMATS, default=DEFAULT_FORMAT)
     parser.add_argument("--target-rms-db", type=float, default=DEFAULT_TARGET_RMS_DB)
     parser.add_argument("--ceiling-db", type=float, default=DEFAULT_CEILING_DB)
     sub = parser.add_subparsers(dest="command", required=True)

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-496d1c68ebff",
+  "title": "September",
+  "artist": "Earth, Wind, Fire",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9518593,
+  "durationSec": 215.8411,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 215.8411,
+  "bpm": 126.56,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.0435,
+  "gainDb": -0.91,
+  "mixPeakDb": -1.18,
+  "mixRmsDb": -18.33,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.58,
+      "rmsDb": -23.11
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -1.0,
+      "rmsDb": -25.32
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -9.01,
+      "rmsDb": -26.58
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.87,
+      "rmsDb": -26.21
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
