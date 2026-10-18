@@ -58,8 +58,8 @@ npm run dev
 
 Then open two windows:
 
-- Decks screen: http://127.0.0.1:5173/
-- Camera screen: http://127.0.0.1:5173/spatial.html
+- Decks screen: https://beatdrop-web.onrender.com
+- Camera screen: https://beatdrop-web.onrender.com/spatial.html
 
 Move each window to its own monitor (the camera screen has a fullscreen button, or press F),
 click **Start session** on the camera screen, and allow camera access.
