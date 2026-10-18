@@ -1,0 +1,160 @@
+/* Minimal default styling for the search component. Override the custom properties
+   or the bd-search* classes to restyle; the component sets no inline styles. */
+
+.bd-search {
+  --bd-search-bg: #15151c;
+  --bd-search-fg: #f2f2f5;
+  --bd-search-muted: #9a9aa8;
+  --bd-search-border: #2c2c38;
+  --bd-search-accent: #1db954;
+  --bd-search-active: #23232e;
+  --bd-search-error: #ff6b6b;
+  --bd-search-radius: 8px;
+
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  font: 14px/1.4 system-ui, sans-serif;
+  color: var(--bd-search-fg);
+}
+
+.bd-search__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--bd-search-border);
+  border-radius: var(--bd-search-radius);
+  background: var(--bd-search-bg);
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.bd-search__input:focus {
+  border-color: var(--bd-search-accent);
+}
+
+.bd-search--disabled .bd-search__input {
+  opacity: 0.5;
+}
+
+.bd-search__status {
+  min-height: 1.4em;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--bd-search-muted);
+}
+
+.bd-search__status[data-kind='error'] {
+  color: var(--bd-search-error);
+}
+
+.bd-search__results {
+  display: none;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--bd-search-border);
+  border-radius: var(--bd-search-radius);
+  background: var(--bd-search-bg);
+}
+
+.bd-search--open .bd-search__results {
+  display: block;
+}
+
+.bd-search__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: calc(var(--bd-search-radius) - 2px);
+}
+
+.bd-search__item[aria-selected='true'] {
+  background: var(--bd-search-active);
+}
+
+.bd-search__art {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--bd-search-border);
+}
+
+.bd-search__meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.bd-search__title,
+.bd-search__artist {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bd-search__artist,
+.bd-search__duration {
+  font-size: 12px;
+  color: var(--bd-search-muted);
+}
+
+.bd-search__duration {
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-search__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.bd-search__load {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--bd-search-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bd-search__action {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--bd-search-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bd-search-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bd-search__load:hover,
+.bd-search__action:hover {
+  border-color: var(--bd-search-accent);
+  color: var(--bd-search-accent);
+}
+
+.bd-search__load:disabled,
+.bd-search__action:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.bd-search__badge {
+  padding: 1px 6px;
+  border: 1px solid var(--bd-search-accent);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--bd-search-accent);
+}

@@ -14,17 +14,21 @@ Every track written by this tool satisfies the same guarantees:
   * lossless output (WAV/FLAC) -- no MP3/AAC encoder delay to break alignment
 
 Subcommands:
-    separate  run Demucs on a full song and prepare the result
+    separate  run Demucs on a full song and prepare the result (+ lyrics from LRCLIB)
               (the web app does the same through separation_server.py)
     import    prepare stems you already have (optionally aligned against the full mix)
     demo      synthesize two copyright-free demo tracks (no Demucs needed)
     verify    re-check prepared tracks on disk
+    lyrics    (re)fetch lyrics for a prepared track, e.g. with a corrected title/artist
+    cover     add cover art to a prepared track from its original song file
     index     rebuild <out>/index.json from the track folders
 
 Output layout (default --out public/stems):
     index.json
     <track-id>/manifest.json
     <track-id>/waveform.json
+    <track-id>/lyrics.json      (when found; manifest "lyrics" is null otherwise)
+    <track-id>/cover.jpg|png    (embedded art, when the file has it; manifest "cover")
     <track-id>/{vocals,drums,bass,instrumental}.wav
 """
 
@@ -43,6 +47,8 @@ import tempfile
 from math import gcd
 from pathlib import Path
 from typing import Callable
+
+import lyrics as lyrics_lookup
 
 try:
     import numpy as np
@@ -273,8 +279,9 @@ def slugify(text: str) -> str:
 def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str, title: str,
                   artist: str, sample_rate: int, fmt: str, source: str, mix: np.ndarray | None = None,
                   bpm: float | None = None, first_beat: float | None = None,
-                  target_rms_db: float = DEFAULT_TARGET_RMS_DB,
-                  ceiling_db: float = DEFAULT_CEILING_DB) -> dict:
+                  target_rms_db: float = DEFAULT_TARGET_RMS_DB, ceiling_db: float = DEFAULT_CEILING_DB,
+                  lyrics: dict | None = None, cover: tuple[bytes, str] | None = None,
+                  clip_start: float = 0.0, source_duration: float | None = None) -> dict:
     """Make stems sample-aligned, level them, analyze tempo, and write the track folder."""
     missing = [s for s in STEM_IDS if s not in stems]
     if missing:
@@ -334,6 +341,10 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         "mix": waveform_peaks(summed, sample_rate, WAVEFORM_BUCKETS_PER_SEC),
     }
     (staging / "waveform.json").write_text(json.dumps(waveform, separators=(",", ":")))
+    if lyrics:
+        (staging / "lyrics.json").write_text(json.dumps(lyrics, indent=1) + "\n")
+    if cover:
+        (staging / f"cover.{cover[1]}").write_bytes(cover[0])
 
     manifest = {
         "version": MANIFEST_VERSION,
@@ -344,6 +355,9 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         "channels": 2,
         "frames": frames,
         "durationSec": round(frames / sample_rate, 4),
+        # Where this clip sits in the original song (lyrics re-fetching needs it).
+        "clipStartSec": round(clip_start, 4),
+        "sourceDurationSec": round(source_duration if source_duration else frames / sample_rate, 4),
         "bpm": bpm,
         "bpmSource": bpm_source,
         "firstBeatSec": first_beat,
@@ -353,6 +367,8 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         "source": source,
         "stems": stem_entries,
         "waveform": "waveform.json",
+        "lyrics": "lyrics.json" if lyrics else None,
+        "cover": f"cover.{cover[1]}" if cover else None,
     }
     (staging / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if track_dir.exists():
@@ -367,6 +383,9 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         print(f"[{track_id}] stems vs. original mix: {'exact' if rec is None else f'{rec} dB SNR'}")
     for problem in verify_track(track_dir):
         print(f"[{track_id}] VERIFY FAILED: {problem}")
+    if lyrics:
+        kind = f"synced, {len(lyrics['lines'])} lines" if lyrics["synced"] else "plain text only"
+        print(f"[{track_id}] lyrics: {lyrics['matchedArtist']} - {lyrics['matchedTitle']} ({kind})")
     print(f"[{track_id}] wrote {track_dir}")
     return manifest
 
@@ -444,16 +463,33 @@ def run_demucs(input_wav: Path, out_dir: Path, *, model: str, device: str, demuc
     return out_dir / model / input_wav.stem
 
 
-def separate_file(song: Path, *, out_root: Path, track_id: str, title: str, artist: str,
+def song_metadata(song: Path, title: str | None, artist: str | None,
+                  fallback_title: str | None = None) -> tuple[str, str]:
+    """Explicit values win, then the file's tags, then the file name."""
+    tags = lyrics_lookup.read_tags(song)
+    return (title or tags["title"] or fallback_title or song.stem,
+            artist or tags["artist"] or "Unknown Artist")
+
+
+def separate_file(song: Path, *, out_root: Path, track_id: str, title: str | None = None,
+                  artist: str | None = None, fallback_title: str | None = None,
                   sample_rate: int = DEFAULT_SAMPLE_RATE, fmt: str = "wav", start: float | None = None,
                   duration: float | None = None, bpm: float | None = None, first_beat: float | None = None,
                   model: str = DEFAULT_MODEL, device: str = "cpu", demucs_python: str | None = None,
                   target_rms_db: float = DEFAULT_TARGET_RMS_DB, ceiling_db: float = DEFAULT_CEILING_DB,
-                  on_progress: ProgressFn | None = None) -> dict:
-    """Raw audio file in, prepared track (aligned stems + manifest) out. Returns the manifest."""
+                  with_lyrics: bool = True, on_progress: ProgressFn | None = None) -> dict:
+    """Raw audio file in, prepared track (aligned stems + manifest) out. Returns the manifest.
+
+    Title/artist default to the file's tags (purchased files have them), which is also
+    what the lyrics lookup searches for.
+    """
     report = on_progress or (lambda stage, fraction: None)
     report("decoding", 0.0)
-    mix = clip_region(read_audio(song, sample_rate), sample_rate, start, duration)
+    title, artist = song_metadata(song, title, artist, fallback_title)
+    full = read_audio(song, sample_rate)
+    source_duration = len(full) / sample_rate
+    mix = clip_region(full, sample_rate, start, duration)
+    del full
     if len(mix) < MIN_SONG_SEC * sample_rate:
         raise StemError(f"audio is {len(mix) / sample_rate:.1f}s long; need at least {MIN_SONG_SEC:.0f}s")
 
@@ -469,9 +505,13 @@ def separate_file(song: Path, *, out_root: Path, track_id: str, title: str, arti
                  for name in DEMUCS_TO_STEM}
 
     report("analyzing", 0.0)
+    lyrics = (lyrics_lookup.fetch_lyrics(title, artist, source_duration, start=start or 0.0,
+                                         clip_duration=duration) if with_lyrics else None)
     manifest = prepare_track(stems, out_root=out_root, track_id=track_id, title=title, artist=artist,
                              sample_rate=sample_rate, fmt=fmt, source=f"demucs:{model}", mix=mix, bpm=bpm,
-                             first_beat=first_beat, target_rms_db=target_rms_db, ceiling_db=ceiling_db)
+                             first_beat=first_beat, target_rms_db=target_rms_db, ceiling_db=ceiling_db,
+                             lyrics=lyrics, cover=lyrics_lookup.read_cover(song), clip_start=start or 0.0,
+                             source_duration=source_duration)
     report("done", 1.0)
     return manifest
 
@@ -481,8 +521,8 @@ def separate_file(song: Path, *, out_root: Path, track_id: str, title: str, arti
 
 def common_track_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--id", help="track id / folder name (default: slug of title)")
-    p.add_argument("--title", help="display title (default: input file name)")
-    p.add_argument("--artist", default="Unknown Artist")
+    p.add_argument("--title", help="display title (default: file tags, then file name)")
+    p.add_argument("--artist", help="artist (default: file tags)")
     p.add_argument("--start", type=float, help="clip start in seconds (trim long songs to save memory)")
     p.add_argument("--duration", type=float, help="clip length in seconds")
     p.add_argument("--bpm", type=float, help="skip tempo estimation and use this BPM")
@@ -496,7 +536,8 @@ def track_meta(args: argparse.Namespace, fallback_title: str) -> tuple[str, str]
 
 def cmd_separate(args: argparse.Namespace) -> None:
     song = Path(args.song)
-    track_id, title = track_meta(args, song.stem)
+    title, artist = song_metadata(song, args.title, args.artist)
+    track_id = args.id or slugify(title)
     shown: set[tuple[str, int]] = set()
 
     def show(stage: str, fraction: float) -> None:
@@ -504,7 +545,8 @@ def cmd_separate(args: argparse.Namespace) -> None:
             shown.add((stage, int(fraction * 10)))
             print(f"{stage} {fraction:.0%}", flush=True)
 
-    separate_file(song, out_root=args.out, track_id=track_id, title=title, artist=args.artist,
+    separate_file(song, out_root=args.out, track_id=track_id, title=title, artist=artist,
+                  with_lyrics=not args.no_lyrics,
                   sample_rate=args.sample_rate, fmt=args.format, start=args.start, duration=args.duration,
                   bpm=args.bpm, first_beat=args.first_beat, model=args.model, device=args.device,
                   demucs_python=args.demucs_python, target_rms_db=args.target_rms_db,
@@ -539,8 +581,8 @@ def cmd_import(args: argparse.Namespace) -> None:
         mix = clip_region(mix, sr, args.start, args.duration)
     fallback = Path(args.mix or paths["vocals"]).stem
     track_id, title = track_meta(args, fallback)
-    prepare_track(stems, out_root=args.out, track_id=track_id, title=title, artist=args.artist,
-                  sample_rate=sr, fmt=args.format, source="import", mix=mix, bpm=args.bpm,
+    prepare_track(stems, out_root=args.out, track_id=track_id, title=title,
+                  artist=args.artist or "Unknown Artist", sample_rate=sr, fmt=args.format, source="import", mix=mix, bpm=args.bpm,
                   first_beat=args.first_beat, target_rms_db=args.target_rms_db, ceiling_db=args.ceiling_db)
 
 
@@ -572,6 +614,44 @@ def cmd_verify(args: argparse.Namespace) -> None:
     sys.exit(1 if failed else 0)
 
 
+def cmd_lyrics(args: argparse.Namespace) -> None:
+    track_dir = args.out / args.track
+    manifest_path = track_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise StemError(f"no prepared track {args.track!r} in {args.out}")
+    m = json.loads(manifest_path.read_text())
+    title, artist = args.title or m["title"], args.artist or m["artist"]
+    lyrics = lyrics_lookup.fetch_lyrics(title, artist, m.get("sourceDurationSec", m["durationSec"]),
+                                        start=m.get("clipStartSec", 0.0),
+                                        clip_duration=m["durationSec"] if m.get("clipStartSec") else None)
+    if not lyrics:
+        raise StemError(f"no lyrics found for {artist} - {title}; try --title / --artist")
+    (track_dir / "lyrics.json").write_text(json.dumps(lyrics, indent=1) + "\n")
+    m["lyrics"] = "lyrics.json"
+    tmp = track_dir / ".manifest.json.tmp"
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, manifest_path)
+    kind = f"synced, {len(lyrics['lines'])} lines" if lyrics["synced"] else "plain text only"
+    print(f"[{args.track}] lyrics: {lyrics['matchedArtist']} - {lyrics['matchedTitle']} ({kind})")
+
+
+def cmd_cover(args: argparse.Namespace) -> None:
+    track_dir = args.out / args.track
+    manifest_path = track_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise StemError(f"no prepared track {args.track!r} in {args.out}")
+    cover = lyrics_lookup.read_cover(Path(args.song))
+    if not cover:
+        raise StemError(f"{args.song} has no embedded cover art")
+    m = json.loads(manifest_path.read_text())
+    (track_dir / f"cover.{cover[1]}").write_bytes(cover[0])
+    m["cover"] = f"cover.{cover[1]}"
+    tmp = track_dir / ".manifest.json.tmp"
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, manifest_path)
+    print(f"[{args.track}] cover: {m['cover']} ({len(cover[0]) // 1024} KB)")
+
+
 def cmd_index(args: argparse.Namespace) -> None:
     write_index(args.out)
     print(f"wrote {args.out / 'index.json'}")
@@ -593,6 +673,7 @@ def main() -> None:
                    help="Demucs device (default cpu; htdemucs crashes on Apple 'mps', use cuda on NVIDIA)")
     p.add_argument("--demucs-python",
                    help="python interpreter that has demucs installed (default: .venv-demucs if present)")
+    p.add_argument("--no-lyrics", action="store_true", help="skip the online lyrics lookup")
     common_track_args(p)
     p.set_defaults(func=cmd_separate)
 
@@ -611,6 +692,17 @@ def main() -> None:
     p = sub.add_parser("verify", help="check prepared tracks")
     p.add_argument("tracks", nargs="*")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("lyrics", help="(re)fetch lyrics for a prepared track")
+    p.add_argument("track", help="track id (folder name)")
+    p.add_argument("--title", help="search with this title instead of the manifest's")
+    p.add_argument("--artist", help="search with this artist instead of the manifest's")
+    p.set_defaults(func=cmd_lyrics)
+
+    p = sub.add_parser("cover", help="add cover art to a prepared track from its song file")
+    p.add_argument("track", help="track id (folder name)")
+    p.add_argument("song", help="the original audio file with embedded art")
+    p.set_defaults(func=cmd_cover)
 
     p = sub.add_parser("index", help="rebuild index.json")
     p.set_defaults(func=cmd_index)

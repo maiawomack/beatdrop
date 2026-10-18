@@ -1,391 +1,228 @@
-/// <reference types="vite/client" />
-import { syncClips } from './ar/clips';
-import { DriftField } from './ar/DriftField';
-import { createHoloObject, stemView, type HoloObject } from './ar/HoloObject';
-import { InteractionController } from './ar/InteractionController';
-import { NeonScene } from './ar/NeonScene';
-import { DEFAULT_STEMS, defaultPositions, defaultStemLayout } from './ar/layout';
-import { WaveformRenderer } from './ar/WaveformRenderer';
-import { beatAt, wallNow, type AudioStateSource } from './audio/AudioCommands';
-import { WebAudioEngine } from './audio/WebAudioEngine';
-import { createEngineWaveforms } from './bridge/engineWaveforms';
-import { createStemAudioBridge } from './bridge/stemAudioBridge';
-import { drawHandOverlay } from './debug/handOverlay';
-import { InteractionRecorder } from './debug/recorder';
-import { hostAudioEngine } from './integration/broadcastSync';
-import {
-  GrabClassifier,
-  PerceptionPipeline,
-  type GrabGesture,
-  type GrabModel,
-  type HandState,
-  type PerceptionFrame,
-  type Point2,
-} from './perception';
-
-/** 'grab' = closed fist (pinch optional via grabIncludesPinch), aimed at the fingertips. */
-const GRAB_GESTURE: GrabGesture = 'grab';
-
-const stage = document.getElementById('stage') as HTMLDivElement;
-const video = document.getElementById('webcam') as HTMLVideoElement;
-const canvas = document.getElementById('overlay') as HTMLCanvasElement;
-const hud = document.getElementById('hud') as HTMLDivElement;
-const startButton = document.getElementById('start') as HTMLButtonElement;
-const hint = document.getElementById('hint') as HTMLDivElement;
-const status = document.getElementById('status') as HTMLDivElement;
-const ctx = canvas.getContext('2d')!;
-
-function fitStage(): void {
-  if (!video.videoWidth) return;
-  // Letterbox the stage to the video's aspect so overlay coords line up 1:1.
-  const aspect = video.videoWidth / video.videoHeight;
-  const w = Math.min(window.innerWidth, window.innerHeight * aspect);
-  const h = w / aspect;
-  stage.style.width = `${w}px`;
-  stage.style.height = `${h}px`;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
-}
-
-function describe(hand: HandState | undefined): string {
-  if (!hand) return '—';
-  const { phase } = hand[GRAB_GESTURE];
-  const status = hand.tracked ? '' : ' (lost)';
-  return `${phase.padEnd(5)} grip ${hand.grip.ratio.toFixed(2)}  pinch ${hand.pinch.ratio.toFixed(2)}${status}`;
-}
-
 /**
- * Copy authoritative engine state into each object's read-only mirror. When
- * nobody is stretching it, the visual stretch follows the engine's FX value,
- * so changes made elsewhere (e.g. the DJ monitor) show up here too.
+ * Audio engine dev harness — a throwaway page for testing Task 1 end to end.
+ * The real Monitor 1 UI (Task 3) should replace this file, reusing the same wiring:
+ * engine + search bar + local library.
  */
-function syncFromEngine(objects: HoloObject[], engine: AudioStateSource, interaction: InteractionController): void {
-  for (const obj of objects) {
-    const s = engine.stems.get(obj.id);
-    if (!s) continue;
-    obj.audio = stemView(s);
-    if (!obj.stretch) obj.stretchAmount = s.fx;
-  }
-  interaction.perfView = { dropPending: engine.perf.dropPending };
+import { AudioEngine } from './audio/AudioEngine';
+import { searchLibrary, separateTrack } from './library/api';
+import { DECK_IDS, STEM_IDS, type AudioCommand, type AudioEngineState, type DeckId, type DeckState, type TrackInfo } from './shared/types';
+import { createSearchBar } from './ui/SearchBar';
+
+const engine = new AudioEngine();
+
+// Handy for teammates: `beatdrop.engine.dispatch({ type: 'SET_STEM_GAIN', deck: 'A', stem: 'vocals', gain: 0.3 })`
+(window as unknown as { beatdrop: unknown }).beatdrop = { engine };
+
+interface SliderSpec {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  read: (d: DeckState) => number;
+  command: (deck: DeckId, value: number) => AudioCommand;
 }
 
-/** Compact musical status: tempo, bar.beat with beat lights, transport, source. */
-function statusText(engine: AudioStateSource, source: string): string {
-  const t = engine.transport;
-  const beat = beatAt(t);
-  const bpm = t.bpm === null ? '— BPM' : `${Math.round(t.bpm)} BPM`;
-  let pos = '';
-  if (beat !== null) {
-    const inBar = Math.floor(beat) % t.beatsPerBar;
-    const bar = (Math.floor(beat / t.beatsPerBar) % 999) + 1;
-    pos = `  ${String(bar).padStart(2, ' ')}.${inBar + 1}  ` + Array.from({ length: t.beatsPerBar }, (_, i) => (i === inBar ? '●' : '○')).join('');
-  }
-  return `${t.playing ? '▶' : '❚❚'}  ${bpm}${pos}  ·  ${source}`;
-}
-
-function cameraErrorMessage(err: unknown): string {
-  const name = err instanceof DOMException ? err.name : '';
-  if (name === 'NotAllowedError') return 'Camera access was blocked. Allow the camera for this site and reload.';
-  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No usable camera found. Connect a webcam and reload.';
-  if (name === 'NotReadableError') return 'The camera is in use by another app. Close it and reload.';
-  return `Error: ${err instanceof Error ? err.message : String(err)}`;
-}
-
-/** Big centered instruction banner (calibration). */
-function drawBanner(title: string, detail: string): void {
-  const u = canvas.height / 720;
-  ctx.save();
-  ctx.fillStyle = 'rgba(8, 10, 20, 0.72)';
-  ctx.fillRect(0, canvas.height * 0.36, canvas.width, canvas.height * 0.26);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `700 ${u * 44}px ui-monospace, Menlo, monospace`;
-  ctx.fillText(title, canvas.width / 2, canvas.height * 0.44);
-  ctx.font = `500 ${u * 17}px ui-monospace, Menlo, monospace`;
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
-  detail.split('\n').forEach((line, i) => ctx.fillText(line, canvas.width / 2, canvas.height * 0.52 + i * u * 26));
-  ctx.restore();
-}
-
-/** Red "REC" dot in the top-right corner while the debug recorder runs. */
-function drawRecIndicator(seconds: number, label?: string): void {
-  const u = canvas.height / 720;
-  ctx.save();
-  ctx.fillStyle = '#ff3b3b';
-  ctx.beginPath();
-  ctx.arc(canvas.width - u * 162, u * 22, u * 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.font = `600 ${u * 13}px ui-monospace, Menlo, monospace`;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`REC ${seconds.toFixed(0)}s${label ? ` · ${label.toUpperCase()}` : ''}`, canvas.width - u * 150, u * 22);
-  ctx.restore();
-}
-
-/** v2: fist-only. Older models were trained with pincers too, so they're ignored. */
-const MODEL_KEY = 'beatdrop.grabModel.v2';
-/** Display easing toward the tracked position (1/s): ~25 ms lag, removes camera-rate stepping. */
-const DISPLAY_RATE = 40;
-
-function loadGrabModel(): GrabClassifier | null {
-  try {
-    const raw = localStorage.getItem(MODEL_KEY);
-    if (!raw) return null;
-    const c = GrabClassifier.fromModel(JSON.parse(raw) as GrabModel);
-    return c.ready ? c : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveGrabModel(c: GrabClassifier): void {
-  try {
-    localStorage.setItem(MODEL_KEY, JSON.stringify(c.toModel()));
-  } catch {
-    /* storage unavailable: the model still works for this session */
-  }
-}
-
-/**
- * Grab calibration (press C): a few seconds of open hands, then a few seconds
- * of grab poses (pincer, fist, wrap-around). The perception layer learns
- * the user's own poses from these samples.
- */
-interface CalibrationStep {
-  label: 0 | 1 | null;
-  ms: number;
-  title: string;
-  detail: string;
-}
-const CALIBRATION: CalibrationStep[] = [
-  { label: null, ms: 1500, title: 'Get ready: OPEN hands', detail: 'Next: hands open or relaxed — anything that is NOT a grab' },
-  { label: 0, ms: 5000, title: 'OPEN', detail: 'Relaxed, spread, half-curled, pointing, pinching. Move around. Both hands.' },
-  { label: null, ms: 1500, title: 'Get ready: FIST', detail: 'Next: close your hand into a fist' },
-  { label: 1, ms: 6000, title: 'FIST', detail: 'Close your hand into a fist (loose or tight). Move around. Both hands.' },
+const SLIDERS: SliderSpec[] = [
+  { key: 'gain', label: 'Gain', min: 0, max: 1, step: 0.01, read: (d) => d.gain, command: (deck, gain) => ({ type: 'SET_DECK_GAIN', deck, gain }) },
+  ...STEM_IDS.map((stem): SliderSpec => ({ key: stem, label: `${stem[0]!.toUpperCase()}${stem.slice(1)} stem`, min: 0, max: 1, step: 0.01, read: (d) => d.stems[stem].gain, command: (deck, gain) => ({ type: 'SET_STEM_GAIN', deck, stem, gain }) })),
+  { key: 'low', label: 'EQ low (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.low, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'low', gainDb }) },
+  { key: 'mid', label: 'EQ mid (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.mid, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'mid', gainDb }) },
+  { key: 'high', label: 'EQ high (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.high, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'high', gainDb }) },
+  { key: 'filter', label: 'Filter', min: -1, max: 1, step: 0.01, read: (d) => d.filter, command: (deck, value) => ({ type: 'SET_FILTER', deck, value }) },
+  { key: 'echo', label: 'Echo', min: 0, max: 1, step: 0.01, read: (d) => d.echo, command: (deck, amount) => ({ type: 'SET_ECHO', deck, amount }) },
+  { key: 'rate', label: 'Rate', min: 0.5, max: 2, step: 0.01, read: (d) => d.playbackRate, command: (deck, rate) => ({ type: 'SET_PLAYBACK_RATE', deck, rate }) },
 ];
 
-async function main(): Promise<void> {
-  hud.textContent = 'Starting camera + loading hand model + preparing audio…';
-  const [pipeline, audio] = await Promise.all([
-    PerceptionPipeline.create(video),
-    WebAudioEngine.create(DEFAULT_STEMS.map((s) => s.id)),
-  ]);
-  fitStage();
-  window.addEventListener('resize', fitStage);
+const LOOP_SECONDS = 4;
 
-  // This window owns the audio engine; other windows (DJ monitor) connect over BroadcastChannel.
-  let hostWarning = '';
-  const stopHosting = hostAudioEngine(audio, {
-    onConflict: () => {
-      hostWarning = '  ·  ⚠ ANOTHER WINDOW IS ALSO PLAYING AUDIO';
-      console.warn('[sync] Another window is hosting an audio engine: only one window should (duplicate playback).');
-    },
-  });
-  window.addEventListener('pagehide', () => {
-    stopHosting();
-    pipeline.dispose();
-    void audio.close();
-  });
+const app = document.querySelector<HTMLDivElement>('#app')!;
+app.innerHTML = `
+  <style>
+    body { margin: 0; background: #0d0d12; color: #f2f2f5; font: 14px/1.4 system-ui, sans-serif; }
+    main { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: grid; gap: 20px; }
+    h1 { font-size: 18px; margin: 0; }
+    button { background: #23232e; color: inherit; border: 1px solid #2c2c38; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    .decks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .deck { border: 1px solid #2c2c38; border-radius: 8px; padding: 14px; display: grid; gap: 8px; }
+    .deck h2 { font-size: 15px; margin: 0; }
+    .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    .muted { color: #9a9aa8; font-size: 12px; }
+    .error { color: #ff6b6b; font-size: 12px; }
+    label { display: grid; grid-template-columns: 100px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+    kbd { border: 1px solid #2c2c38; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+  </style>
+  <main>
+    <h1>BeatDrop — audio engine harness</h1>
+    <div id="search"></div>
+    <section class="decks">${DECK_IDS.map(deckTemplate).join('')}</section>
+    <label>Crossfader <input id="xf" type="range" min="-1" max="1" step="0.01" value="0"></label>
+    <label>Master <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
+    <p class="muted">
+      Add songs by dropping audio files (mp3, wav, m4a, flac, ogg) named “Artist - Title” into <code>mp3/</code>;
+      they appear in the next search.<br>
+      <kbd>/</kbd> search · <kbd>Enter</kbd> load to A · <kbd>Shift+Enter</kbd> load to B ·
+      <kbd>Q</kbd>/<kbd>P</kbd> play/pause A/B · <kbd>Space</kbd> play/pause both ·
+      <kbd>W</kbd>/<kbd>O</kbd> loop A/B · <kbd>←</kbd>/<kbd>→</kbd> crossfader
+    </p>
+  </main>
+`;
 
-  const aspect0 = video.videoWidth / video.videoHeight;
-  const stems = defaultStemLayout(aspect0).map(createHoloObject);
-
-  pipeline.gestures.classifier = loadGrabModel();
-  let calib: { step: number; stepStart: number } | null = null;
-  let calibDone: { at: number; text: string } | null = null;
-
-  const recorder = new InteractionRecorder({ aspect: aspect0, gesture: GRAB_GESTURE, userAgent: navigator.userAgent });
-  const interaction = new InteractionController(
-    stems,
-    aspect0,
-    recorder.tap(createStemAudioBridge(audio)),
-    GRAB_GESTURE,
-  );
-  syncFromEngine(stems, audio, interaction);
-  // Dev only: poke the session from the console (e.g. __beatdrop.audio.dispatch({ type: 'drop' })).
-  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { audio, interaction, stems } });
-  const drift = new DriftField(aspect0, GRAB_GESTURE);
-  const waveSource = createEngineWaveforms(audio);
-  const waveforms = new WaveformRenderer(waveSource);
-  const neon = new NeonScene();
-
-  // Browsers only allow audio to start from a user gesture.
-  startButton.hidden = false;
-  startButton.addEventListener('click', () => {
-    void audio.start();
-    startButton.hidden = true;
-    hint.hidden = true;
-  });
-
-  window.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
-    if (key === 'h') hud.classList.toggle('hidden');
-    if (key === 'c' && !e.repeat) {
-      if (e.shiftKey) {
-        pipeline.gestures.clearCalibration();
-        try {
-          localStorage.removeItem(MODEL_KEY);
-        } catch {
-          /* ignore */
-        }
-        calibDone = { at: performance.now(), text: 'Calibration cleared: using default fist grip' };
-      } else {
-        calib = { step: 0, stepStart: performance.now() };
-        pipeline.gestures.collect(null);
-      }
-    }
-    if (key === 'd') recorder.toggle();
-    // While recording, hold O / P / F to label frames open / pinch / fist for tuning.
-    if (!e.repeat && recorder.recording) {
-      if (key === 'o') recorder.label = 'open';
-      if (key === 'p') recorder.label = 'pinch';
-      if (key === 'f') recorder.label = 'fist';
-    }
-    if (key === 'r') interaction.resetLayout(defaultPositions(video.videoWidth / video.videoHeight));
-    if (key === ' ') {
-      e.preventDefault();
-      startButton.hidden = true;
-      hint.hidden = true;
-      void audio.togglePause();
-    }
-    // 1/2/3 mute, Shift+1/2/3 solo (e.code so Shift doesn't turn "1" into "!").
-    const digit = /^Digit([1-3])$/.exec(e.code);
-    const obj = digit ? stems[Number(digit[1]) - 1] : undefined;
-    if (obj) {
-      const s = audio.stems.get(obj.id);
-      if (e.shiftKey) audio.dispatch({ type: 'setSolo', stemId: obj.id, value: !s?.solo });
-      else audio.dispatch({ type: 'setMute', stemId: obj.id, value: !s?.muted });
-    }
-  });
-
-  window.addEventListener('keyup', (e) => {
-    if (['o', 'p', 'f'].includes(e.key.toLowerCase())) recorder.label = undefined;
-  });
-
-  let frames = 0;
-  let fps = 0;
-  let fpsWindowStart = performance.now();
-
-  // Tracking runs at camera rate (~24-30 fps); drawing runs at display rate.
-  // Between camera frames, each stem glides toward its real position, so
-  // motion looks continuous instead of stepping with the camera.
-  let lastFrame: PerceptionFrame | null = null;
-  let banner: { title: string; detail: string } | null = null;
-  const shown = new Map<string, Point2>();
-  let lastDraw = performance.now();
-  const draw = (now: number) => {
-    requestAnimationFrame(draw);
-    const dt = Math.min(0.1, (now - lastDraw) / 1000);
-    lastDraw = now;
-    const k = 1 - Math.exp(-DISPLAY_RATE * dt);
-    const display = interaction.objects.map((obj) => {
-      const prev = shown.get(obj.id) ?? obj.position;
-      const p = { x: prev.x + (obj.position.x - prev.x) * k, y: prev.y + (obj.position.y - prev.y) * k };
-      shown.set(obj.id, p);
-      return { ...obj, position: p };
-    });
-    const pair = interaction.blendPair;
-    const find = (o: HoloObject) => display.find((d) => d.id === o.id) ?? o;
-    const scene = {
-      t: now / 1000,
-      dt,
-      beat: waveSource.beat?.() ?? null,
-      level: (id: string) => waveSource.level?.(id) ?? 0,
-      blend: pair ? { a: find(pair[0]), b: find(pair[1]), isolation: interaction.isolation } : null,
-      nowMs: wallNow(),
-      build: interaction.build,
-      perf: audio.perf,
-    };
-    neon.update(display, scene, canvas.width, canvas.height);
-    waveforms.pulse = neon.pulse;
-    waveforms.energy = neon.energy;
-    waveforms.impact = neon.impact;
-    const line = statusText(audio, audio.sourceKind === 'files' ? 'STEM FILES' : 'DEMO SONG') + hostWarning;
-    if (status.textContent !== line) status.textContent = line;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    neon.drawBackground(ctx);
-    waveforms.render(ctx, display, now, { backdrop: video });
-    neon.drawForeground(ctx, scene);
-    if (lastFrame) drawHandOverlay(ctx, lastFrame, GRAB_GESTURE, interaction.handModes);
-    if (banner) drawBanner(banner.title, banner.detail);
-    if (recorder.recording) drawRecIndicator(recorder.seconds, recorder.label);
-  };
-  requestAnimationFrame(draw);
-
-  pipeline.onFrame((frame) => {
-    const aspect = video.videoWidth / video.videoHeight;
-    syncClips(audio, interaction);
-    syncFromEngine(stems, audio, interaction);
-    interaction.setAspect(aspect);
-    interaction.update(frame);
-    drift.setAspect(aspect);
-    drift.step(interaction.objects, frame);
-
-    lastFrame = frame;
-    if (calib) {
-      const step = CALIBRATION[calib.step];
-      if (frame.timestamp - calib.stepStart >= step.ms) {
-        calib.step++;
-        calib.stepStart = frame.timestamp;
-        if (calib.step >= CALIBRATION.length) {
-          const c = pipeline.gestures.finishCalibration();
-          const { open, grab } = c.counts;
-          calibDone = c.ready
-            ? { at: frame.timestamp, text: `Calibrated ✓  (${open} open / ${grab} grab samples)` }
-            : { at: frame.timestamp, text: 'Not enough hand samples: press C to try again' };
-          if (c.ready) saveGrabModel(c);
-          calib = null;
-        } else {
-          pipeline.gestures.collect(CALIBRATION[calib.step].label);
-        }
-      }
-    }
-    if (calib) {
-      const step = CALIBRATION[calib.step];
-      const left = Math.max(0, step.ms - (frame.timestamp - calib.stepStart)) / 1000;
-      const n = pipeline.gestures.sampleCounts;
-      banner = { title: step.title, detail: `${step.detail}\n${left.toFixed(1)}s   ·   ${n.open} open / ${n.grab} grab` };
-    } else if (calibDone && frame.timestamp - calibDone.at < 2500) {
-      banner = { title: calibDone.text, detail: '' };
-    } else {
-      banner = null;
-    }
-    recorder.capture(frame, stems);
-
-    frames++;
-    if (frame.timestamp - fpsWindowStart >= 1000) {
-      fps = (frames * 1000) / (frame.timestamp - fpsWindowStart);
-      frames = 0;
-      fpsWindowStart = frame.timestamp;
-    }
-    if (hud.classList.contains('hidden')) return;
-    const byId = (id: string) => frame.hands.find((h) => h.id === id);
-    const stemLines = stems.map((obj) => {
-      const s = audio.stems.get(obj.id);
-      const owner = obj.levelHand ? `level:${obj.levelHand}` : obj.holders.length ? `held:${obj.holders.join('+')}` : 'free';
-      const mix = s
-        ? `vol ${s.volume.toFixed(2)}  fx ${s.fx.toFixed(2)}  filt ${s.filter.toFixed(2)}${s.loop ? `  loop ${s.loop.beats}${s.loop.engaged ? '' : '…'}` : ''}${s.muted ? '  MUTE' : ''}${s.solo ? '  SOLO' : ''}`
-        : '';
-      return `${obj.label.padEnd(6)}: ${owner.padEnd(16)}${mix}`;
-    });
-    const modes = [...interaction.handModes].map(([h, m]) => `${h}: ${m}`).join('   ') || 'no hands';
-    const perf = audio.perf;
-    const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
-    hud.textContent =
-      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   audio: ${audio.sourceKind === 'files' ? 'stem files' : 'demo song'} ${audio.playing ? '▶' : '❚❚'}\n` +
-      `[space] play  [1-3] mute  [⇧1-3] solo  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record (hold O/P/F to label)  [H] hide\n` +
-      `modes  ${modes}\n${perfLine}\n` +
-      `Left : ${describe(byId('Left'))}\n` +
-      `Right: ${describe(byId('Right'))}\n` +
-      stemLines.join('\n');
-  });
-
-  pipeline.start();
+function deckTemplate(id: DeckId): string {
+  return `
+    <div class="deck" data-deck="${id}">
+      <h2>Deck ${id}</h2>
+      <div data-field="title" class="muted">Empty</div>
+      <div data-field="info" class="muted"></div>
+      <div data-field="error" class="error"></div>
+      <div class="buttons">
+        <button data-action="toggle">Play</button>
+        <button data-action="loop">Loop ${LOOP_SECONDS}s</button>
+        <button data-action="restart">⏮</button>
+      </div>
+      ${SLIDERS.map(
+        (s) => `<label>${s.label} <input data-control="${s.key}" type="range" min="${s.min}" max="${s.max}" step="${s.step}"></label>`,
+      ).join('')}
+    </div>`;
 }
 
-main().catch((err) => {
-  console.error(err);
-  hud.classList.remove('hidden');
-  hud.textContent = cameraErrorMessage(err);
+// --- Search ----------------------------------------------------------------
+
+async function loadTrack(track: TrackInfo, deck: DeckId): Promise<void> {
+  await engine.resume();
+  await engine.dispatch({ type: 'LOAD_TRACK', deck, track });
+}
+
+const searchBar = createSearchBar({
+  search: (query, signal) => searchLibrary(query, signal),
+  onSelect: (track, deck) => void loadTrack(track, deck),
+  placeholder: 'Search your library (mp3/)…',
+  minChars: 0,
+  extraActions: [
+    {
+      label: 'Separate',
+      title: 'Separate stems (needs tools/stems/separation_server.py running)',
+      isAvailable: (t) => !t.stemsManifestUrl,
+      run: async (t, progress) => {
+        await separateTrack(t, (job) => progress(`Separating “${t.title}”: ${job.state} ${Math.round(job.progress * 100)}%`));
+        searchBar.refresh();
+        return `Stems ready for “${t.title}”. Load it again to use them.`;
+      },
+    },
+  ],
+});
+document.querySelector('#search')!.append(searchBar.element);
+
+// --- Decks -----------------------------------------------------------------
+
+function deckEl(id: DeckId): HTMLElement {
+  return document.querySelector<HTMLElement>(`.deck[data-deck="${id}"]`)!;
+}
+
+function toggleLoop(id: DeckId): void {
+  const d = latest.decks[id];
+  if (d.loop) {
+    void engine.dispatch({ type: 'CLEAR_LOOP', deck: id });
+  } else {
+    const start = engine.getPositionSec(id);
+    void engine.dispatch({ type: 'SET_LOOP', deck: id, startSec: start, endSec: start + LOOP_SECONDS });
+  }
+}
+
+for (const id of DECK_IDS) {
+  const root = deckEl(id);
+  root.querySelector('[data-action="toggle"]')!.addEventListener('click', () => {
+    void engine.dispatch({ type: 'TOGGLE_PLAY', deck: id });
+  });
+  root.querySelector('[data-action="loop"]')!.addEventListener('click', () => toggleLoop(id));
+  root.querySelector('[data-action="restart"]')!.addEventListener('click', () => {
+    void engine.dispatch({ type: 'SEEK', deck: id, positionSec: 0 });
+  });
+  for (const spec of SLIDERS) {
+    const input = root.querySelector<HTMLInputElement>(`[data-control="${spec.key}"]`)!;
+    input.addEventListener('input', () => void engine.dispatch(spec.command(id, Number(input.value))));
+  }
+}
+
+const xf = document.querySelector<HTMLInputElement>('#xf')!;
+xf.addEventListener('input', () => void engine.dispatch({ type: 'SET_CROSSFADER', value: Number(xf.value) }));
+const master = document.querySelector<HTMLInputElement>('#master')!;
+master.addEventListener('input', () => void engine.dispatch({ type: 'SET_MASTER_GAIN', gain: Number(master.value) }));
+
+let latest: AudioEngineState = engine.getState();
+
+engine.subscribe((state) => {
+  latest = state;
+  for (const id of DECK_IDS) {
+    const d = state.decks[id];
+    const root = deckEl(id);
+    root.querySelector('[data-field="title"]')!.textContent = d.track
+      ? `${d.track.title} — ${d.track.artists.join(', ')}`
+      : 'Empty';
+    root.querySelector('[data-field="error"]')!.textContent = d.error ?? '';
+    root.querySelector('[data-action="toggle"]')!.textContent = d.playing ? 'Pause' : 'Play';
+    root.querySelector('[data-action="loop"]')!.textContent = d.loop ? 'Exit loop' : `Loop ${LOOP_SECONDS}s`;
+    for (const spec of SLIDERS) {
+      setIfIdle(root.querySelector<HTMLInputElement>(`[data-control="${spec.key}"]`)!, spec.read(d));
+    }
+  }
+  setIfIdle(xf, state.mixer.crossfader);
+  setIfIdle(master, state.mixer.masterGain);
+});
+
+/** Reflect state changes made elsewhere (e.g. the AR window) without fighting the user's drag. */
+function setIfIdle(input: HTMLInputElement, value: number): void {
+  if (document.activeElement !== input) input.value = String(value);
+}
+
+function tick(): void {
+  for (const id of DECK_IDS) {
+    const d = latest.decks[id];
+    const info = deckEl(id).querySelector('[data-field="info"]')!;
+    const source = d.source === 'stems' ? `stems (${countStems(d)})` : d.source;
+    info.textContent =
+      d.status === 'empty'
+        ? ''
+        : `${d.status} · ${source} · ${formatTime(engine.getPositionSec(id))} / ${formatTime(d.durationSec)}`;
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function countStems(d: DeckState): number {
+  return Object.values(d.stems).filter((s) => s.available).length;
+}
+
+function formatTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// --- Keyboard --------------------------------------------------------------
+
+document.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
+  if (e.repeat) return;
+  void engine.resume();
+  const key = e.key.toLowerCase();
+  if (key === '/') {
+    e.preventDefault();
+    searchBar.focus();
+  } else if (key === 'q') {
+    void engine.dispatch({ type: 'TOGGLE_PLAY', deck: 'A' });
+  } else if (key === 'p') {
+    void engine.dispatch({ type: 'TOGGLE_PLAY', deck: 'B' });
+  } else if (key === ' ') {
+    e.preventDefault();
+    const anyPlaying = DECK_IDS.some((id) => latest.decks[id].playing);
+    for (const id of DECK_IDS) void engine.dispatch({ type: anyPlaying ? 'PAUSE' : 'PLAY', deck: id });
+  } else if (key === 'w') {
+    toggleLoop('A');
+  } else if (key === 'o') {
+    toggleLoop('B');
+  } else if ((key === 'arrowleft' || key === 'arrowright') && !(e.target instanceof HTMLInputElement)) {
+    e.preventDefault();
+    const step = key === 'arrowleft' ? -0.05 : 0.05;
+    void engine.dispatch({ type: 'SET_CROSSFADER', value: latest.mixer.crossfader + step });
+  }
 });

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BeatDrop · Spatial</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; color: #eee; font-family: system-ui, sans-serif; }
+      body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      #stage { position: relative; width: 100vw; height: 56.25vw; }
+      #stage video, #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      /* Mirror the feed so it behaves like a mirror. The overlay canvas is NOT
+         flipped: perception already outputs mirrored coordinates. */
+      #stage video { transform: scaleX(-1); object-fit: cover; }
+      #hud { position: absolute; left: 14px; bottom: 14px; z-index: 3;
+             font: 11px/1.5 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .02em;
+             color: rgba(200, 225, 255, .8); white-space: pre; pointer-events: none;
+             background: rgba(6, 10, 22, .45); border: 1px solid rgba(120, 180, 255, .18);
+             padding: 8px 12px; border-radius: 10px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #hud.hidden { display: none; }
+      /* Soft vignette to frame the scene. */
+      #fx { position: absolute; inset: 0; pointer-events: none; z-index: 1;
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(2, 4, 14, .45) 100%); }
+      #overlay { z-index: 2; }
+      #brand { position: absolute; top: 14px; left: 16px; z-index: 3; pointer-events: none;
+               font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
+               color: rgba(190, 220, 255, .75); text-shadow: 0 0 8px rgba(80, 180, 255, .6); }
+      #brand span { color: rgba(190, 220, 255, .4); }
+      #hint[hidden] { display: none; }
+      #hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 3;
+              pointer-events: none; font: 10px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .2em;
+              color: rgba(190, 220, 255, .6); white-space: nowrap; text-align: center; line-height: 1.9; }
+      #status { position: absolute; top: 12px; right: 16px; z-index: 3; pointer-events: none;
+                font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; white-space: pre;
+                color: rgba(200, 230, 255, .8); text-shadow: 0 0 8px rgba(80, 180, 255, .5); }
+      @media (max-width: 700px) { #hint { display: none; } }
+      #start { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4;
+               font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .3em;
+               color: #e8f4ff; background: rgba(8, 14, 32, .55); cursor: pointer;
+               border: 1px solid rgba(120, 200, 255, .5); border-radius: 999px; padding: 14px 28px;
+               box-shadow: 0 0 24px rgba(80, 180, 255, .35), inset 0 0 12px rgba(80, 180, 255, .15);
+               backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+      #start:hover { box-shadow: 0 0 36px rgba(80, 180, 255, .6), inset 0 0 16px rgba(80, 180, 255, .25); }
+      #start[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <video id="webcam" autoplay playsinline muted></video>
+      <div id="fx"></div>
+      <canvas id="overlay"></canvas>
+      <div id="brand">BEATDROP <span>// SPATIAL MIX</span></div>
+      <div id="status"></div>
+      <div id="hint">FIST = GRAB · TAP = MUTE · TWO FISTS ON ONE STEM = STRETCH FX · ONE STEM PER HAND = PULL APART TO ISOLATE<br>
+        ◯ LEFT CAP = LOOP (RAISE = LONGER, DRAG OUT = FLOATING CLIP) · ◐ RIGHT CAP or TWIST A HELD STEM = FILTER · FINGERTIPS TOGETHER, POINTING DOWN = LIFT TO BUILD, LET GO TO DROP<br>
+        SPACE PLAY · R RESET · C CALIBRATE GRIP · H DEBUG</div>
+      <button id="start" hidden>▶ START SESSION</button>
+      <div id="hud" class="hidden">Starting camera…</div>
+    </div>
+    <script type="module" src="/src/spatial/main.ts"></script>
+  </body>
+</html>
