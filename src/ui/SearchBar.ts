@@ -18,8 +18,8 @@ export interface SearchAction {
   title: string;
   /** Hide the button for tracks it doesn't apply to. */
   isAvailable?: (track: TrackInfo) => boolean;
-  /** Return a message to show in the status line on success. */
-  run: (track: TrackInfo) => void | string | Promise<void | string>;
+  /** Return a message to show in the status line on success; call `progress` for updates while running. */
+  run: (track: TrackInfo, progress: (message: string) => void) => void | string | Promise<void | string>;
 }
 
 export interface SearchBar {
@@ -103,8 +103,8 @@ export function createSearchBar(options: SearchBarOptions): SearchBar {
         meta.append(title, artist);
 
         const badge = el('span', 'bd-search__badge');
-        badge.textContent = track.stems ? 'stems' : '';
-        badge.hidden = !track.stems;
+        badge.textContent = 'stems';
+        badge.hidden = !track.stemsManifestUrl;
 
         const duration = el('span', 'bd-search__duration');
         duration.textContent = track.durationMs === null ? '' : formatDuration(track.durationMs);
@@ -164,7 +164,7 @@ export function createSearchBar(options: SearchBarOptions): SearchBar {
     button.disabled = true;
     setStatus(`${action.title}: “${track.title}”…`, 'loading');
     try {
-      const message = await action.run(track);
+      const message = await action.run(track, (text) => setStatus(text, 'loading'));
       setStatus(message || `${action.title}: done`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : `${action.title} failed`, 'error');

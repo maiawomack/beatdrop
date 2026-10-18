@@ -16,30 +16,29 @@ Vite server ([`server/audioLibrary.ts`](../server/audioLibrary.ts)), so use `npm
 - Name them `Artist - Title.mp3`. That's where the artist and title come from
   (`Artist A, Artist B - Title` and `A & B - Title` give multiple artists).
 - The folder is rescanned on every search, so new files appear without restarting.
-- `mp3/` and `stems/` are gitignored. Purchased music is licensed to you, so don't commit
-  it; each teammate keeps their own copies.
+- `mp3/` and `public/stems/` are gitignored. Purchased music is licensed to you, so don't
+  commit it; each teammate keeps their own copies.
 
 Each file gets an id from its path, e.g. `mp3/Calvin Harris - Summer.mp3` → `calvin-harris-summer`.
 
-## Stems (for stem processing, Task 5)
+## Stems
 
-Write stems into `stems/<id>/` (or `stems/<file name without extension>/`):
+Stems come from the stem pipeline in [`tools/stems/`](../tools/stems/README.md) (Task 5), which
+writes `public/stems/<stems id>/manifest.json` plus the stem files. The engine loads them with
+that pipeline's `loadTrack()` from [`src/stems/`](../src/stems/).
 
-```
-stems/calvin-harris-summer/
-  vocals.wav
-  drums.wav
-  bass.wav
-  instrumental.wav      ("other.wav" also counts as instrumental)
-```
+To separate a library song, either:
 
-Files named `vocals`, `drums`, `bass`, `instrumental` or `other` (any supported extension) are
-detected automatically. To use other names, add a `manifest.json` such as
-`{ "vocals": "song_vocals.mp3", "instrumental": "song_accomp.mp3" }`. Stems must be the same
-length and start aligned with the original.
+- **From the app:** start `tools/stems/separation_server.py`, then click **Separate** on the
+  search result. The server names the output `t-<hash of the file>`, and the library computes
+  the same hash to find it.
+- **From the command line:** `prepare_stems.py separate "mp3/Calvin Harris - Summer.mp3" --id calvin-harris-summer`.
+  Without `--id`, the pipeline names the folder after the title, which matches the library id
+  for files whose tags have no title.
 
-When a track has stems, search shows a **stems** badge and loading it plays the stems, so
-per-stem controls work. Otherwise the deck plays the full mix.
+When a track has stems, search shows a **stems** badge and loading it plays the four stems, so
+per-stem controls work and the deck's BPM comes from the manifest. Otherwise the deck plays the
+full mix.
 
 ## Using the engine
 
@@ -70,4 +69,4 @@ same time, and every control works on both.
 |---|---|
 | `GET /api/library?q=<words>` | `{ tracks: TrackInfo[] }`. All words must match; empty lists everything |
 | `GET /api/library/audio/<id>` | the full-mix file (Range requests supported) |
-| `GET /api/library/stems/<id>/<stem>` | one stem file |
+| `GET /api/library/stems/<stems id>/<file>` | files from `public/stems/<stems id>/` (manifest, waveform, lyrics, stems) |

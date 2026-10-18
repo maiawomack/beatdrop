@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -11,17 +12,18 @@ import type { Plugin } from 'vite';
  * every request, so new uploads appear without restarting. Metadata comes from the
  * filename: "Artist - Title.mp3" (anything without " - " uses the whole name as title).
  *
- * Stems for a track go in `stemsDir/<track id>/` (or a folder named exactly like the
- * audio file without its extension). Files named vocals/drums/bass/instrumental
- * (or "other" for instrumental) are detected automatically; a manifest.json such as
- * { "vocals": "v.wav" } overrides detection.
+ * Stems come from the Task 5 pipeline (tools/stems), which writes
+ * `stemsDir/<stems id>/manifest.json`. A library file is matched to its stems by either id
+ * the pipeline uses:
+ *   - separation_server.py: "t-" + sha256("None|None|" + file bytes)[:12]  (whole-song uploads)
+ *   - prepare_stems.py separate: slug of the title, i.e. the library id for untagged files
  *
- *   GET /api/library?q=<search>          → { tracks: LibraryTrack[] }
- *   GET /api/library/audio/<id>          → full mix (Range supported)
- *   GET /api/library/stems/<id>/<stem>   → one stem (Range supported)
+ *   GET /api/library?q=<search>                 → { tracks: TrackInfo[] }
+ *   GET /api/library/audio/<id>                 → full mix (Range supported)
+ *   GET /api/library/stems/<stems id>/<file>    → manifest.json, waveform.json, lyrics.json, stem audio
  */
 
-const AUDIO_TYPES: Record<string, string> = {
+const CONTENT_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.m4a': 'audio/mp4',
@@ -29,18 +31,10 @@ const AUDIO_TYPES: Record<string, string> = {
   '.flac': 'audio/flac',
   '.ogg': 'audio/ogg',
   '.opus': 'audio/ogg',
+  '.json': 'application/json',
 };
-
-const STEM_KEYS = ['vocals', 'drums', 'bass', 'instrumental'] as const;
-type StemKey = (typeof STEM_KEYS)[number];
-const STEM_ALIASES: Record<string, StemKey> = {
-  vocals: 'vocals',
-  vocal: 'vocals',
-  drums: 'drums',
-  bass: 'bass',
-  instrumental: 'instrumental',
-  other: 'instrumental',
-};
+const AUDIO_EXTENSIONS = new Set(Object.keys(CONTENT_TYPES).filter((ext) => ext !== '.json'));
+const SAFE_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 interface LibraryEntry {
   id: string;
@@ -49,7 +43,9 @@ interface LibraryEntry {
   absPath: string;
   title: string;
   artists: string[];
-  stems: Partial<Record<StemKey, string>>;
+  /** Folder name under stemsDir, when the track has been separated. */
+  stemsId: string | null;
+  bpm: number | null;
 }
 
 /** Shape sent to the browser; matches TrackInfo in src/shared/types.ts. */
@@ -62,7 +58,7 @@ interface LibraryTrack {
   durationMs: number | null;
   fileName: string;
   audioUrl: string;
-  stems: Partial<Record<StemKey, string>> | null;
+  stemsManifestUrl: string | null;
   bpm: number | null;
 }
 
@@ -78,6 +74,12 @@ export function audioLibrary(options: { libraryDir: string; stemsDir: string }):
   };
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL, parts: string[]): Promise<void> {
+    if (parts[2] === 'stems' && parts.length === 5) {
+      const [, , , stemsId, file] = parts as [string, string, string, string, string];
+      if (!SAFE_SEGMENT.test(stemsId) || !SAFE_SEGMENT.test(file)) return sendJson(res, 400, { error: 'Bad path' });
+      return sendFile(req, res, path.join(stemsDir, stemsId, file));
+    }
+
     const entries = await scan(libraryDir, stemsDir);
 
     if (parts.length === 2) {
@@ -91,14 +93,10 @@ export function audioLibrary(options: { libraryDir: string; stemsDir: string }):
       return sendJson(res, 200, { tracks });
     }
 
-    const entry = entries.find((e) => e.id === parts[3]);
-    if (!entry) return sendJson(res, 404, { error: 'Track not found' });
-
-    if (parts[2] === 'audio' && parts.length === 4) return sendFile(req, res, entry.absPath);
-    if (parts[2] === 'stems' && parts.length === 5) {
-      const file = entry.stems[parts[4] as StemKey];
-      if (!file) return sendJson(res, 404, { error: 'Stem not found' });
-      return sendFile(req, res, file);
+    if (parts[2] === 'audio' && parts.length === 4) {
+      const entry = entries.find((e) => e.id === parts[3]);
+      if (!entry) return sendJson(res, 404, { error: 'Track not found' });
+      return sendFile(req, res, entry.absPath);
     }
     return sendJson(res, 404, { error: 'Not found' });
   }
@@ -111,9 +109,6 @@ export function audioLibrary(options: { libraryDir: string; stemsDir: string }):
 }
 
 function toTrack(e: LibraryEntry): LibraryTrack {
-  const base = `/api/library/stems/${encodeURIComponent(e.id)}`;
-  const stems: Partial<Record<StemKey, string>> = {};
-  for (const key of STEM_KEYS) if (e.stems[key]) stems[key] = `${base}/${key}`;
   return {
     id: e.id,
     title: e.title,
@@ -123,15 +118,15 @@ function toTrack(e: LibraryEntry): LibraryTrack {
     durationMs: null,
     fileName: e.fileName,
     audioUrl: `/api/library/audio/${encodeURIComponent(e.id)}`,
-    stems: Object.keys(stems).length > 0 ? stems : null,
-    bpm: null,
+    stemsManifestUrl: e.stemsId ? `/api/library/stems/${encodeURIComponent(e.stemsId)}/manifest.json` : null,
+    bpm: e.bpm,
   };
 }
 
 // --- Scanning ----------------------------------------------------------------
 
 async function scan(libraryDir: string, stemsDir: string): Promise<LibraryEntry[]> {
-  const files = (await walk(libraryDir)).filter((f) => AUDIO_TYPES[path.extname(f).toLowerCase()]);
+  const files = (await walk(libraryDir)).filter((f) => AUDIO_EXTENSIONS.has(path.extname(f).toLowerCase()));
   files.sort((a, b) => a.localeCompare(b));
 
   const usedIds = new Set<string>();
@@ -139,15 +134,23 @@ async function scan(libraryDir: string, stemsDir: string): Promise<LibraryEntry[
   for (const absPath of files) {
     const fileName = path.relative(libraryDir, absPath).split(path.sep).join('/');
     const baseName = path.basename(absPath, path.extname(absPath));
-    const baseId = slugify(fileName.slice(0, fileName.length - path.extname(fileName).length)) || 'track';
+    const baseId = slugify(fileName.slice(0, fileName.length - path.extname(fileName).length));
     let id = baseId;
     for (let n = 2; usedIds.has(id); n++) id = `${baseId}-${n}`;
     usedIds.add(id);
 
     const { title, artists } = parseName(baseName);
-    const stems =
-      (await findStems(path.join(stemsDir, id))) ?? (await findStems(path.join(stemsDir, baseName))) ?? {};
-    entries.push({ id, fileName, absPath, title, artists, stems });
+    let stemsId: string | null = null;
+    let bpm: number | null = null;
+    for (const candidate of [await separationServerId(absPath), slugify(baseName)]) {
+      const manifest = await readManifest(path.join(stemsDir, candidate));
+      if (manifest) {
+        stemsId = candidate;
+        bpm = typeof manifest.bpm === 'number' ? manifest.bpm : null;
+        break;
+      }
+    }
+    entries.push({ id, fileName, absPath, title, artists, stemsId, bpm });
   }
   return entries;
 }
@@ -169,36 +172,32 @@ async function walk(dir: string): Promise<string[]> {
   return out;
 }
 
-/** Returns stem key → absolute path, or null when the folder doesn't exist / has no stems. */
-async function findStems(dir: string): Promise<Partial<Record<StemKey, string>> | null> {
-  let names: string[];
+async function readManifest(dir: string): Promise<{ bpm?: unknown } | null> {
   try {
-    names = await readdir(dir);
+    const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as unknown;
+    return manifest && typeof manifest === 'object' ? (manifest as { bpm?: unknown }) : null;
   } catch {
     return null;
   }
-  const stems: Partial<Record<StemKey, string>> = {};
+}
 
-  if (names.includes('manifest.json')) {
-    try {
-      const manifest = JSON.parse(await readFile(path.join(dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
-      for (const [key, value] of Object.entries(manifest)) {
-        const stem = STEM_ALIASES[key.toLowerCase()];
-        if (!stem || typeof value !== 'string') continue;
-        const file = path.resolve(dir, value);
-        if (file.startsWith(path.resolve(dir) + path.sep) && names.includes(path.basename(file))) stems[stem] = file;
-      }
-    } catch {
-      // malformed manifest; fall back to detection
-    }
-  }
+const hashCache = new Map<string, { size: number; mtimeMs: number; id: string }>();
 
-  for (const name of names) {
-    const ext = path.extname(name).toLowerCase();
-    const stem = STEM_ALIASES[path.basename(name, path.extname(name)).toLowerCase()];
-    if (stem && AUDIO_TYPES[ext] && !stems[stem]) stems[stem] = path.join(dir, name);
-  }
-  return Object.keys(stems).length > 0 ? stems : null;
+/**
+ * The track id separation_server.py assigns to a whole-file upload:
+ * "t-" + sha256(f"{start}|{duration}|" + bytes)[:12], with start/duration unset (Python None).
+ * Cached per file so rescans only hash new or changed files.
+ */
+async function separationServerId(file: string): Promise<string> {
+  const { size, mtimeMs } = await stat(file);
+  const cached = hashCache.get(file);
+  if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached.id;
+
+  const hash = createHash('sha256').update('None|None|');
+  for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+  const id = `t-${hash.digest('hex').slice(0, 12)}`;
+  hashCache.set(file, { size, mtimeMs, id });
+  return id;
 }
 
 function parseName(baseName: string): { title: string; artists: string[] } {
@@ -219,21 +218,28 @@ function safeDecode(segment: string): string {
   }
 }
 
+/** Same as slugify() in tools/stems/prepare_stems.py, so CLI-separated tracks match library ids. */
 function slugify(text: string): string {
-  return text
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'track'
+  );
 }
 
 // --- Responses ---------------------------------------------------------------
 
 async function sendFile(req: IncomingMessage, res: ServerResponse, file: string): Promise<void> {
-  const { size } = await stat(file);
-  res.setHeader('Content-Type', AUDIO_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
+  let size: number;
+  try {
+    const info = await stat(file);
+    if (!info.isFile()) throw new Error('not a file');
+    size = info.size;
+  } catch {
+    return sendJson(res, 404, { error: 'File not found' });
+  }
+  res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'no-cache');
 

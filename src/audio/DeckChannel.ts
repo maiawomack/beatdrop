@@ -1,4 +1,4 @@
-import { EQ_BANDS, STEM_IDS, type EqBand, type LoopState, type StemId, type StemUrls } from '../shared/types';
+import { EQ_BANDS, STEM_IDS, type EqBand, type LoopState, type StemId } from '../shared/types';
 
 type BufferKey = StemId | 'full';
 
@@ -90,21 +90,27 @@ export class DeckChannel {
     return this._playing;
   }
 
-  /** Fetches and decodes every URL in parallel. Resolves to the stems that loaded. */
-  async load(urls: StemUrls, signal?: AbortSignal): Promise<StemId[]> {
+  /** Fetches and decodes the full mix of an unseparated track. */
+  async loadFullMix(url: string, signal?: AbortSignal): Promise<void> {
     this.unload();
-    const entries = Object.entries(urls).filter((e): e is [BufferKey, string] => typeof e[1] === 'string');
-    const decoded = await Promise.all(
-      entries.map(async ([key, url]) => {
-        const res = await fetch(url, { signal });
-        if (!res.ok) throw new Error(`Failed to fetch ${key} (${res.status}): ${url}`);
-        const buffer = await this.ctx.decodeAudioData(await res.arrayBuffer());
-        return [key, buffer] as const;
-      }),
-    );
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`Failed to fetch audio (${res.status}): ${url}`);
+    const buffer = await this.ctx.decodeAudioData(await res.arrayBuffer());
     signal?.throwIfAborted();
-    for (const [key, buffer] of decoded) this.buffers[key] = buffer;
-    this.duration = Math.max(0, ...decoded.map(([, b]) => b.duration));
+    this.setBuffers({ full: buffer });
+  }
+
+  /**
+   * Uses already-decoded buffers, e.g. LoadedTrack.buffers from src/stems/loadTrack().
+   * Stems must share one length so a shared start time keeps them aligned.
+   */
+  setBuffers(buffers: Partial<Record<BufferKey, AudioBuffer>>): void {
+    this.unload();
+    this.buffers = { ...buffers };
+    this.duration = Math.max(0, ...Object.values(buffers).map((b) => b.duration));
+  }
+
+  get loadedStems(): StemId[] {
     return STEM_IDS.filter((s) => this.buffers[s]);
   }
 

@@ -4,8 +4,8 @@
  * engine + search bar + local library.
  */
 import { AudioEngine } from './audio/AudioEngine';
-import { searchLibrary } from './library/api';
-import { DECK_IDS, type AudioCommand, type AudioEngineState, type DeckId, type DeckState, type TrackInfo } from './shared/types';
+import { searchLibrary, separateTrack } from './library/api';
+import { DECK_IDS, STEM_IDS, type AudioCommand, type AudioEngineState, type DeckId, type DeckState, type TrackInfo } from './shared/types';
 import { createSearchBar } from './ui/SearchBar';
 
 const engine = new AudioEngine();
@@ -25,7 +25,7 @@ interface SliderSpec {
 
 const SLIDERS: SliderSpec[] = [
   { key: 'gain', label: 'Gain', min: 0, max: 1, step: 0.01, read: (d) => d.gain, command: (deck, gain) => ({ type: 'SET_DECK_GAIN', deck, gain }) },
-  { key: 'vocals', label: 'Vocals stem', min: 0, max: 1, step: 0.01, read: (d) => d.stems.vocals.gain, command: (deck, gain) => ({ type: 'SET_STEM_GAIN', deck, stem: 'vocals', gain }) },
+  ...STEM_IDS.map((stem): SliderSpec => ({ key: stem, label: `${stem[0]!.toUpperCase()}${stem.slice(1)} stem`, min: 0, max: 1, step: 0.01, read: (d) => d.stems[stem].gain, command: (deck, gain) => ({ type: 'SET_STEM_GAIN', deck, stem, gain }) })),
   { key: 'low', label: 'EQ low (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.low, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'low', gainDb }) },
   { key: 'mid', label: 'EQ mid (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.mid, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'mid', gainDb }) },
   { key: 'high', label: 'EQ high (dB)', min: -24, max: 6, step: 0.5, read: (d) => d.eq.high, command: (deck, gainDb) => ({ type: 'SET_EQ', deck, band: 'high', gainDb }) },
@@ -98,6 +98,18 @@ const searchBar = createSearchBar({
   onSelect: (track, deck) => void loadTrack(track, deck),
   placeholder: 'Search your library (mp3/)…',
   minChars: 0,
+  extraActions: [
+    {
+      label: 'Separate',
+      title: 'Separate stems (needs tools/stems/separation_server.py running)',
+      isAvailable: (t) => !t.stemsManifestUrl,
+      run: async (t, progress) => {
+        await separateTrack(t, (job) => progress(`Separating “${t.title}”: ${job.state} ${Math.round(job.progress * 100)}%`));
+        searchBar.refresh();
+        return `Stems ready for “${t.title}”. Load it again to use them.`;
+      },
+    },
+  ],
 });
 document.querySelector('#search')!.append(searchBar.element);
 

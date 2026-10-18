@@ -7,17 +7,19 @@
  * it can be sent over BroadcastChannel between windows.
  */
 
+import { STEM_IDS, type StemId } from '../stems/types';
+
 export type DeckId = 'A' | 'B';
 export const DECK_IDS: readonly DeckId[] = ['A', 'B'];
 
-export type StemId = 'vocals' | 'drums' | 'bass' | 'instrumental';
-export const STEM_IDS: readonly StemId[] = ['vocals', 'drums', 'bass', 'instrumental'];
+// Stem ids are defined once, by the stem pipeline's data contract (Task 5).
+export { STEM_IDS, type StemId };
 
 export type EqBand = 'low' | 'mid' | 'high';
 export const EQ_BANDS: readonly EqBand[] = ['low', 'mid', 'high'];
 
 export interface TrackInfo {
-  /** Stable id derived from the filename, e.g. "calvin-harris-summer". Also the stems/ folder name. */
+  /** Stable library id derived from the file path, e.g. "calvin-harris-summer". */
   id: string;
   title: string;
   artists: string[];
@@ -29,14 +31,14 @@ export interface TrackInfo {
   fileName: string;
   /** Full-mix URL the engine fetches and decodes. */
   audioUrl: string | null;
-  /** Separated stems found in stems/<id>/, or null when the track hasn't been processed. */
-  stems: StemUrls | null;
-  /** Set manually (SET_BPM) or by stem processing. */
+  /**
+   * manifest.json written by the stem pipeline (tools/stems), or null when the track
+   * hasn't been separated yet. Loaded with loadTrack() from src/stems.
+   */
+  stemsManifestUrl: string | null;
+  /** From the stems manifest when separated; otherwise set manually (SET_BPM). */
   bpm: number | null;
 }
-
-/** Audio file URLs for a track. `full` is the full mix; any stem may be missing. */
-export type StemUrls = Partial<Record<StemId | 'full', string>>;
 
 // ---------------------------------------------------------------------------
 // Commands — the only way other subsystems change audio.
@@ -46,8 +48,8 @@ export type StemUrls = Partial<Record<StemId | 'full', string>>;
 // ---------------------------------------------------------------------------
 
 export type AudioCommand =
-  /** Plays `stems` if given, else `track.stems`, else the full mix at `track.audioUrl`. */
-  | { type: 'LOAD_TRACK'; deck: DeckId; track: TrackInfo; stems?: StemUrls }
+  /** Loads the separated stems when `track.stemsManifestUrl` is set, else the full mix at `track.audioUrl`. */
+  | { type: 'LOAD_TRACK'; deck: DeckId; track: TrackInfo }
   | { type: 'UNLOAD_TRACK'; deck: DeckId }
   | { type: 'PLAY'; deck: DeckId }
   | { type: 'PAUSE'; deck: DeckId }

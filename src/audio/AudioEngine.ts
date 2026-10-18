@@ -7,8 +7,8 @@ import {
   type DeckId,
   type DeckState,
   type StemId,
-  type StemUrls,
 } from '../shared/types';
+import { loadTrack as loadStems } from '../stems';
 import { DeckChannel, clamp } from './DeckChannel';
 
 type Listener = (state: AudioEngineState) => void;
@@ -193,18 +193,25 @@ export class AudioEngine {
     this.channels[id].unload();
     this.emit();
 
-    const hasUrls = (u: StemUrls | null | undefined): u is StemUrls => !!u && Object.values(u).some(Boolean);
-    const stems = hasUrls(cmd.stems) ? cmd.stems : hasUrls(cmd.track.stems) ? cmd.track.stems : null;
-    const urls: StemUrls | null = stems ?? (cmd.track.audioUrl ? { full: cmd.track.audioUrl } : null);
-
     try {
-      if (!urls) throw new Error('Track has no audio source');
-      const loaded = await this.channels[id].load(urls, abort.signal);
-      if (seq !== this.loadSeq[id]) return;
-      deck.source = this.channels[id].hasStems ? 'stems' : 'full';
-      deck.durationSec = this.channels[id].duration;
+      const channel = this.channels[id];
+      if (cmd.track.stemsManifestUrl) {
+        // Task 5's loader validates the manifest and guarantees equal-length buffers.
+        const loaded = await loadStems(this.ctx, cmd.track.stemsManifestUrl, { signal: abort.signal });
+        if (seq !== this.loadSeq[id]) return;
+        channel.setBuffers(loaded.buffers);
+        deck.bpm = loaded.manifest.bpm;
+      } else if (cmd.track.audioUrl) {
+        await channel.loadFullMix(cmd.track.audioUrl, abort.signal);
+        if (seq !== this.loadSeq[id]) return;
+      } else {
+        throw new Error('Track has no audio source');
+      }
+      deck.source = channel.hasStems ? 'stems' : 'full';
+      deck.durationSec = channel.duration;
       deck.track = { ...cmd.track, durationMs: Math.round(deck.durationSec * 1000) };
-      for (const s of STEM_IDS) deck.stems[s].available = loaded.includes(s);
+      const loadedStems = channel.loadedStems;
+      for (const s of STEM_IDS) deck.stems[s].available = loadedStems.includes(s);
       deck.status = 'ready';
     } catch (err) {
       if (seq !== this.loadSeq[id] || isAbort(err)) return;
