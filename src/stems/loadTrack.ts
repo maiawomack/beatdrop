@@ -8,6 +8,7 @@ import {
   type StemId,
   type TrackIndex,
   type TrackIndexEntry,
+  type TrackLyrics,
   type TrackManifest,
   type TrackWaveform,
 } from './types';
@@ -97,6 +98,36 @@ export function fetchWaveform(
   signal?: AbortSignal,
 ): Promise<TrackWaveform> {
   return fetchJson<TrackWaveform>(new URL(track.manifest.waveform, track.manifestUrl).href, signal);
+}
+
+/** Lyrics for a track, or null if none were found when it was prepared. */
+export async function fetchLyrics(
+  track: Pick<LoadedTrack, 'manifest' | 'manifestUrl'>,
+  signal?: AbortSignal,
+): Promise<TrackLyrics | null> {
+  if (!track.manifest.lyrics) return null;
+  return fetchJson<TrackLyrics>(new URL(track.manifest.lyrics, track.manifestUrl).href, signal);
+}
+
+/**
+ * Index of the synced line being sung at `timeSec` (track time, i.e. the playback
+ * position), or -1 before the first line. Binary search, cheap enough per frame.
+ */
+export function lyricLineAt(lyrics: TrackLyrics, timeSec: number): number {
+  const { lines } = lyrics;
+  let lo = 0;
+  let hi = lines.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid]!.timeSec <= timeSec) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return found;
 }
 
 function validateManifest(manifest: TrackManifest, url: string): void {
