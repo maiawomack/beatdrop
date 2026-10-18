@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { GesturePhase, HandId, Point2 } from '../perception';
-import { FADE_TRAVEL, PINCH_ARM_MS, RECORD_TURNS_PER_SEC, SCRATCH_ARM_MS, SCRATCH_VIRTUAL_RADIUS, TWO_UP_ARM_MS } from './InteractionController';
-import { ASPECT, FRAME_MS, gesture, hand, Rig } from './testRig';
+import {
+  FADE_TRAVEL,
+  PINCH_ARM_MS,
+  RECORD_TURNS_PER_SEC,
+  SCRATCH_AFTER_LIFT_MS,
+  SCRATCH_ARM_MS,
+  SCRATCH_VIRTUAL_RADIUS,
+  TWO_UP_ARM_MS,
+} from './InteractionController';
+import { ASPECT, FRAME_MS, gesture, hand, liftHand, Rig } from './testRig';
 
 /** Thumb + index pinch (not a fist). */
 function pinch(id: HandId, p: Point2, phase: GesturePhase = 'held', fist = false) {
@@ -69,6 +77,28 @@ describe('open-palm controls', () => {
     // The same palm on the left half (off the record) does take deck A.
     rig.frame(palm('Right', { x: 0.8, y: 0.5 }, 'end'));
     rest({ x: 0.3, y: 0.6 }, SCRATCH_ARM_MS + 2 * FRAME_MS);
+    expect(scratches()[0]).toMatchObject({ phase: 'start' });
+  });
+
+  it('an open hand on the move (reaching for a drink) never arms a scratch', () => {
+    // Open palm drifting steadily across deck A's side for a whole second.
+    rig.frame(palm('Right', { x: 0.1, y: 0.8 }, 'start'));
+    for (let i = 1; i * FRAME_MS < 1000; i++) rig.frame(palm('Right', { x: 0.1 + i * 0.008, y: 0.8 - i * 0.012 }));
+    expect(scratches()).toHaveLength(0);
+  });
+
+  it('a palm turned away from the camera (e.g. around a cup) never arms', () => {
+    rig.frame(palm('Right', rec, 'start', true, false));
+    for (let t = 0; t < 1000; t += FRAME_MS) rig.frame(palm('Right', rec, 'held', true, false));
+    expect(scratches()).toHaveLength(0);
+  });
+
+  it('opening the hand out of the lift pose (a drop) does not scratch; a deliberate palm later does', () => {
+    for (let t = 0; t < 300; t += FRAME_MS) rig.frame(liftHand('Right', rec, t ? 'held' : 'start'));
+    rig.frame(liftHand('Right', rec, 'end'));
+    rest(rec, SCRATCH_AFTER_LIFT_MS - 200);
+    expect(scratches()).toHaveLength(0);
+    rest(rec, SCRATCH_ARM_MS + 4 * FRAME_MS);
     expect(scratches()[0]).toMatchObject({ phase: 'start' });
   });
 

@@ -50,7 +50,7 @@ Every gesture uses a **closed fist** (the calibrated grab, see below). New contr
 | Fist on the **filter cap**, move up/down | ◐ right cap | Up = highpass, down = lowpass, relative to where you grabbed; detent at 0; the value holds on release | `setFilter` |
 | Tap on the filter cap | ◐ right cap | Reset the filter to off | `setFilter 0` |
 | **Lift pose**, raise it | anywhere | Build 0 → 1 over 0.35 view-height above where the pose started. A meter and energy ball follow the hand | `setBuild` |
-| …then **let go** (open the fingers) with build ≥ 50%, **or pull down** (≥ 0.07 within 300 ms) | same hand | DROP, landing on the next bar; the shockwave comes from your hand | `drop` |
+| …then **let go** (open your hand) once it says BUILD (≥ 25%) | same hand | DROP, landing on the next beat: the energy ball falls from your hand into the wave at the bottom, which surges out | `drop` |
 | …let go with a small build, or lower it slowly | same hand | Cancel: the build glides back to 0 | `setBuild 0` |
 | Hand leaves frame | anywhere | Releases after a 400 ms grace; controls cancel rather than commit | `release` / none |
 
@@ -62,12 +62,13 @@ These rules keep gestures from triggering by mistake:
 
 - **Drop:**
   - Only the lift pose builds. Detection lives in perception (`HandState.lift`, in `src/perception/gestures.ts`). The pose counts when the fingertips are bunched, meaning the thumb/index/middle spread is under 0.55 palm lengths, and the wrist → fingertips direction points down the image. Once engaged, the pose holds while the hand tilts. A fist never builds, and the lift pose never grabs stems.
-  - Pulling down needs build ≥ 0.25 first, and letting go needs build ≥ 0.5. Below that, letting go cancels.
-  - A deliberate pull-down. It doesn't need to be a hard slam, because a hard slam blurs the camera and loses tracking.
+  - Only **letting go** drops, once the build is ≥ 0.25 (the label says BUILD). Below that, letting go cancels. Moving the hand down never drops by itself; to cancel, lower the hand (the build falls with it) and then let go.
+  - A hand that **vanishes** while the build is up (opening fast blurs the camera) counts as letting go, so it drops. The exception is a hand raised out the **top** of the frame: that cancels.
+  - **Pull length:** full build is 0.55 view heights above where the lift pose started. Starting high, it shortens (to 0.25 at least) so full build stays reachable 0.12 below the top of the frame.
   - Has a 1.5 s cooldown.
   - Fires at most once per grab.
-- **Build:** falls back at most 0.9/s, so the slam itself doesn't drain it before the drop.
-- **Losing the hand never drops.** That covers both a hand lost mid-slam and an arm dropping out of frame. It cancels the build instead.
+- **Build:** falls back at most 0.9/s, so dipping the hand just before letting go doesn't drain it.
+- **Losing the hand out the top of the frame never drops.** It cancels the build instead.
 - **Filter:** rate-limited to 4 per second, and it freezes while tracking is shaky. A one-frame glitch can't slam it.
 - **Loop choice:** only applies when you deliberately open your hand. Losing tracking cancels it.
 - **Locked stems:** a stem whose cap is being held can't be dragged by the other hand.
@@ -89,7 +90,7 @@ IDLE ──near──► HOVER ──fist──┬─ on stem body ─► GRABBI
   │              │           ├─ on loop cap ───► LOOP_SELECTING ──open─► setLoop (or cancel)
   │              │           ├─ on filter cap ─► FILTER_CONTROL ──open─► value held
   │   lift pose (anywhere) ────────────────────► BUILD_ARMED ──raise ≥ 0.25─► BUILDING
-  │              │                                       let go / pull down ▼
+  │              │                                       open hand (≥ 0.5) ▼
   └──────────────┴──────────── open hand ◄──────────── DROP_PENDING ◄──┘
 ```
 
@@ -171,7 +172,7 @@ In dev builds, `window.__beatdrop` exposes `{ audio, interaction, stems }` for c
 | Filter | ✅ | Per-stem DJ filter: lowpass (20 kHz → 160 Hz) or highpass (10 Hz → 5 kHz), resonant toward the extremes. Separate from stretch FX. |
 | Loop | ✅ | Beat-quantized slip loop (details below) |
 | Build | ✅ | Master-bus effect (details below) |
-| Drop | ✅ | Bar-quantized release plus impact (details below) |
+| Drop | ✅ | Beat-quantized release plus impact (details below) |
 | Waveforms, playhead, level meter | real data | Peaks come from the decoded buffers around the actual playhead. Level comes from an analyser after the fader. |
 | Loop region on the waveform | real data | Engine loop state plus the actual playback position |
 | Beat pulse, grid speed, status bar.beat | real data | Engine transport (`bpm`, `anchorMs`) |
@@ -183,21 +184,32 @@ In dev builds, `window.__beatdrop` exposes `{ audio, interaction, stems }` for c
 - **Exiting** also happens on a beat, and the stem rejoins the song where it would have been (slip mode). The other stems keep playing the song.
 - **Verified** in headless Chrome: playback stays inside the region, and the stem rejoins the timeline exactly on exit.
 
-**Build details.** A master-bus effect, kept separate from the mix:
+**Build details.** A master-bus effect in `AudioEngine.applyBuild`, kept separate from the mix, following the hand's height continuously (raise slowly = slow build, quickly = fast build):
 
-- highpass sweep, 12 Hz → 1.4 kHz with rising resonance
-- bass ducked by up to 85% and drums by up to 30%, on separate "perf" gain nodes
-- echo wash
-- band-passed noise riser
+- **High-pass:** two cascaded filters (24 dB/oct), 10 Hz → 900 Hz, so the kick and bass really leave. A little resonance at the cutoff adds tension without booming.
+- **Stereo:** the image narrows to 40% width, so the drop can snap it wide again.
+- **Level:** the mix dips to 85%, so the drop lands louder without needing more headroom.
+- **Stems:** bass ducked by up to 85% and drums by up to 30%, on separate "perf" gain nodes.
+- **Echo wash:** repeats on the lead deck's dotted eighth (3/4 beat) when it has a tempo.
+- **Riser:** band-passed noise, 400 Hz → 8 kHz, swaying between the speakers faster as the build rises.
+- **Echo wash grows:** its feedback climbs from 0.4 to 0.68 and it brightens (3.5 → 7 kHz), then rings out long after the drop.
+- **Rhythmic gate:** from 60% build, the music chops in time with the snare roll (open on each hit, dipping for the second half of the step), up to 80% deep at the top.
+- **Snare roll:** from 35% build, a synthesized snare on the lead deck's beat grid that speeds up with the build (beats → 8ths → 16ths → 32nds) and gets louder and brighter. Scheduled sample-accurately 120 ms ahead. No beat grid, no roll: it never invents a tempo.
 
-All of it uses `setTargetAtTime` automation, so there are no clicks.
+All of it is `setTargetAtTime` automation (rise fast, fall gently), so there are no clicks. With nothing playing there's no build: pausing, a song ending, or loading a new song releases it, and cancels a drop that hasn't landed (roll and impact included).
 
-**Drop details.** The engine schedules the drop on the **next bar downbeat** (`DROP_QUANTUM_BEATS = 4`). Until then, tension keeps rising. On the downbeat:
+**Drop details.** With a beat grid, the engine lands the drop on the lead deck's **next beat**, never more than a beat away. Without one, it lands immediately (it never pretends a grid exists). Until then, the build squeezes a little further, and when there's room the mix takes a **breath**: near-silence for up to half a beat (at most 150 ms) right before the hit. On the beat:
 
-- the highpass releases
-- the ducking and riser cut
-- the echo tails out
-- a sub boom and noise crash play
+- the high-pass, stereo width and level snap back, with a **bass punch** (+4 dB low shelf easing off over about a second) and a **stereo bloom** (130% width settling back to normal)
+- the stem ducking lifts; the riser and snare roll stop
+- the echo wash rings out
+- the **impact**: a kick-like boom diving into an 808-style sub tail, lightly saturated so it's audible on laptop speakers, plus a wide stereo crash
+
+A safety limiter (−1.5 dBFS) and a soft ceiling after it (transparent below 0.9) catch peaks (two loud decks, the impact), so nothing hard-clips.
+
+**On screen:** while building, a shimmer rises along the bottom edge. When you let go, the energy ball falls from your hand (accelerating, with a streak) and lands in the wave exactly on the drop. A tall double crest surges out to both edges from there, the shockwave rings start at the landing point, and the floor keeps churning and swelling hard on the beat for about 4 s (`NeonScene.drawWave`).
+
+Verified in headless Chrome on a real song: bass −12 dB at full build; roll hits exactly 1, ½, ¼, ⅛ beat apart; the gate dips the music to about a quarter of its level between hits at full build; a ~110 ms breath before the hit; every parameter back to neutral after the drop; peaks never reach full scale.
 
 ## Driving the real songs: the Task 1 engine
 
@@ -211,17 +223,22 @@ The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared
     - A pinch deeper inside the bar doesn't grab it, and fists do nothing on bars.
   - **Removed from bars for now** (pinch gestures to come): tap to mute, twist to filter, loop and filter caps, two-hand stretch, blend/isolate, and clip pull-out. The controller code is still there for free-floating stems and clips.
 - **Records (scratch):** each loaded deck has a record above its bars, in the deck's colour, turning at 33⅓ rpm with the real playback position.
-  - **To scratch:** hold an **open palm** anywhere (fingers up or sideways, not hanging down) for about 0.2 s, then rock it back and forth. You don't need to be on a record: the left half of the screen scratches deck A, the right half deck B. Pinching a record also works.
+  - **To scratch:** hold an **open palm** anywhere (fingers up or sideways, not hanging down), **facing the camera and still**, for about 0.45 s, then rock it back and forth. Moving restarts the hold, and a palm within 1.2 s of a lift pose or a drop never arms, so reaching for a drink or opening the hand to drop doesn't scratch. You don't need to be on a record: the left half of the screen scratches deck A, the right half deck B. Pinching a record also works.
     - **What it follows:** whichever arc the hand makes each frame, with no double counting:
       - **Tilting at the wrist,** like a windshield wiper, from the hand's in-plane angle `HandState.roll`.
       - **The hand moving around a centre:** the record's centre when it's on a record, otherwise an invisible record just below where the hand started. Plain side-to-side counts as this.
     - **Mapping:** clockwise (as you see it) = forward. One full turn = one revolution at 33⅓ rpm (1.8 s of audio).
-    - **Fast scratches:** the scrub voice predicts the hand between camera frames and allows up to 8× speed.
+    - **How the audio follows the hand** (`src/audio/scratchVoice.ts`, an AudioWorklet with its own read head, so it really plays backwards):
+      - The hand's speed comes from successive positions, extrapolated for up to 60 ms between camera frames.
+      - **Response curve:** tracking jitter is ignored (dead zone 0.06×). Small movements stay subtle (power curve, exponent 1.35). Fast ones are soft-clamped at 3×.
+      - **Weight:** the record's speed follows that curve through a little mass (18 ms), so pitch glides instead of jumping. A gentle pull keeps it near the hand's position; if the hand outruns the 3× limit, the record slips under it instead of racing to catch up.
+      - **Catch and release:** grabbing a playing record brakes it from full speed. Letting go spins it back up like a turntable motor (70 ms) while the scratch fades and the live song fades back in.
+      - **Sound:** level follows speed like a cartridge (a still record is silent). A speed-tracking low-pass prevents aliasing on fast scratches. Cubic interpolation.
     - **Both screens follow the scratch:** while a hand scratches a deck, `AudioEngine.getPositionSec()` reports the scratch position (what you hear), and the song keeps running underneath. So the decks screen's record (`src/decks/components/Vinyl.tsx`, which steers its spin animation from that position) and its waveform playhead turn with your hand, then carry on in time after you let go.
     - **Excluded:** fingers hanging down (the lift pose).
   - **To let go:** close your hand, or lose tracking. A pinched record also lets go if you move well off it.
   - **Stays in time:** it's slip mode. The song keeps running underneath, so it carries on exactly where it would have been. Verified in headless Chrome: 0.00 s off.
-  - **Engine side:** `SCRATCH_START` / `SCRATCH_MOVE` / `SCRATCH_END` (Task 1 additions), played through an AudioWorklet scrub voice.
+  - **Engine side:** `SCRATCH_START` / `SCRATCH_MOVE` / `SCRATCH_END` (Task 1 additions), played through the AudioWorklet scratch voice. `getPositionSec()` reports the voice's real record position while scratching.
 - **Pinch** (held for about 0.15 s without closing into a fist) grabs what's under it:
   - **a record:** scratch
   - **the top of a bar:** volume
@@ -295,7 +312,7 @@ These are additive: existing commands and state behave exactly as before. **Siyo
 
 - `src/ar/InteractionController.test.ts`: move/tap/flick/stretch/blend, ownership, reset.
 - `src/ar/performanceControls.test.ts`:
-  - build/drop: drops exactly once; mixer restored; open-mid-slam; slow-lower cancels; not enough build; tracking loss; cooldown; no drop while dragging; drop pending; independent hands
+  - build/drop: letting go drops exactly once; mixer restored; open while moving down; pulling down alone never drops; slow-lower cancels; not enough build; tracking loss; cooldown; no drop while dragging; drop pending; independent hands
   - loop: select/commit; tap toggle; cancel on loss; stretch never loops; locked stems
   - filter: bounds; hold; tap reset; glitch rate limit; untracked freeze
   - hand state machine

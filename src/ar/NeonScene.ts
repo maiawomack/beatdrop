@@ -1,13 +1,13 @@
 import { viewToPixels, type Point2 } from '../perception';
 import { effectiveHalfWidth, type HoloObject } from './HoloObject';
-import { BUILD_MIN, BUILD_TRAVEL, RELEASE_DROP_MIN, type BuildView } from './InteractionController';
+import { BUILD_MIN, RELEASE_DROP_MIN, type BuildView } from './InteractionController';
 
 /**
  * Neon holographic atmosphere around the stems: a color grade, a perspective
  * grid floor that scrolls with the beat, rising particles off loud waveforms,
  * a light beam between the two stems of a blend pair, and the build/drop
  * gesture: an energy ball and charge meter on the fist, and a shockwave
- * from where you slammed.
+ * from where you let go.
  *
  * Pure visuals. Reads stem state and beat info; never mutates anything.
  * Everything is drawn with additive blending and kept faint so hands and
@@ -34,6 +34,10 @@ export interface NeonFrame {
 
 /** How long the drop impact animates (ms). */
 const IMPACT_MS = 900;
+/** How long the wave along the bottom rolls after a drop (ms). */
+const WAVE_MS = 4200;
+/** Where the energy ball lands when it drops into the wave (view y). */
+const FLOOR_Y = 0.95;
 
 interface Particle {
   x: number;
@@ -60,9 +64,15 @@ export class NeonScene {
   energy = 0;
   /** 1 at the moment the drop lands, decaying to 0 over IMPACT_MS. */
   impact = 0;
+  /** Time since the drop landed, 0..1 over WAVE_MS (or -1 when no wave is rolling). */
+  private wave = -1;
+  /** Wave motion, advanced each frame (faster and choppier right after a drop). */
+  private wavePhase = 0;
   private burstFor: number | null = null;
   /** Where the last build fist was, so the drop countdown and shockwave stay there after the hand opens. */
   private lastBuild: { from: Point2; point: Point2 } | null = null;
+  /** The energy ball falling from the open hand into the wave while the drop is pending. */
+  private fall: { startMs: number; atMs: number; from: Point2 } | null = null;
 
   /** Advance beat pulse and particles. Call once per drawn frame. */
   update(objects: HoloObject[], f: NeonFrame, cw: number, ch: number): void {
@@ -77,7 +87,12 @@ export class NeonScene {
     // Drop impact, timed to when the drop reaches the speakers.
     const age = f.perf.dropAtMs !== null ? f.nowMs - f.perf.dropAtMs : -1;
     this.impact = age >= 0 && age < IMPACT_MS && !f.perf.dropPending ? 1 - age / IMPACT_MS : 0;
+    this.wave = age >= 0 && age < WAVE_MS && !f.perf.dropPending ? age / WAVE_MS : -1;
+    this.wavePhase += f.dt * (this.wave >= 0 ? 1 + 2.5 * (1 - this.wave) ** 2 : 1);
     if (f.build) this.lastBuild = { from: { ...f.build.from }, point: { ...f.build.point } };
+    if (f.perf.dropPending && f.perf.dropAtMs !== null && this.fall?.atMs !== f.perf.dropAtMs && this.lastBuild) {
+      this.fall = { startMs: f.nowMs, atMs: f.perf.dropAtMs, from: { ...this.lastBuild.point } };
+    }
     if (this.impact > 0 && this.burstFor !== f.perf.dropAtMs) {
       this.burstFor = f.perf.dropAtMs;
       this.pulse = 1;
@@ -125,9 +140,17 @@ export class NeonScene {
     this.particles = this.particles.filter((p) => p.life > 0);
   }
 
-  /** Where drop effects come from: the slam point, or the screen center. */
+  /** Where drop effects come from: where the hand let go, or the screen center. */
   private origin(cw: number, ch: number): Point2 {
-    return this.lastBuild ? viewToPixels(this.lastBuild.point, cw, ch) : { x: cw / 2, y: ch / 2 };
+    return { x: (this.lastBuild?.point.x ?? 0.5) * cw, y: FLOOR_Y * ch };
+  }
+
+  /** The ball while the drop is pending: falling (accelerating) from the hand to the floor, landing on the beat. */
+  private fallingPoint(f: NeonFrame): Point2 | null {
+    const fall = this.fall;
+    if (!f.perf.dropPending || !fall) return null;
+    const k = fall.atMs > fall.startMs ? Math.min(1, Math.max(0, (f.nowMs - fall.startMs) / (fall.atMs - fall.startMs))) : 1;
+    return { x: fall.from.x, y: fall.from.y + (FLOOR_Y - fall.from.y) * k * k };
   }
 
   /** Radial spark burst for the drop. */
@@ -215,6 +238,7 @@ export class NeonScene {
   drawForeground(ctx: CanvasRenderingContext2D, f: NeonFrame): void {
     const { width: cw, height: ch } = ctx.canvas;
     const u = ch / 720;
+    if (this.wave >= 0 || this.energy > 0.02) this.drawWave(ctx, cw, ch, u);
     if (f.build || f.perf.dropPending || this.impact > 0) this.drawBuild(ctx, f, cw, ch, u);
     if (this.impact > 0) this.drawImpact(ctx, f, cw, ch, u);
     ctx.save();
@@ -237,13 +261,32 @@ export class NeonScene {
    * Build/drop on the fist: a charge meter rising from where the fist closed
    * (fills as the hand rises, with the threshold marked), an energy ball on
    * the fist that grows and crackles, and a label saying what to do next.
-   * After the slam it counts the beats down to the drop at the slam point.
+   * After letting go it counts the beats down to the drop where the hand opened.
    */
   private drawBuild(ctx: CanvasRenderingContext2D, f: NeonFrame, cw: number, ch: number, u: number): void {
     const where = f.build ?? this.lastBuild;
     if (!where) return;
+    // After the hit the ball is gone: it dropped into the wave.
+    if (!f.build && !f.perf.dropPending) return;
+    const falling = this.fallingPoint(f);
     const from = viewToPixels(where.from, cw, ch);
-    const p = viewToPixels(where.point, cw, ch);
+    const p = viewToPixels(f.build ? where.point : (falling ?? where.point), cw, ch);
+    if (falling && !f.build && this.fall) {
+      // Streak behind the falling ball.
+      const top = viewToPixels(this.fall.from, cw, ch);
+      const streak = ctx.createLinearGradient(0, Math.max(top.y, p.y - ch * 0.25), 0, p.y);
+      streak.addColorStop(0, 'rgba(255, 90, 200, 0)');
+      streak.addColorStop(1, 'rgba(255, 140, 220, 0.75)');
+      ctx.save();
+      ctx.strokeStyle = streak;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = ch * 0.03;
+      ctx.beginPath();
+      ctx.moveTo(p.x, Math.max(top.y, p.y - ch * 0.25));
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ctx.restore();
+    }
     const e = this.energy;
     const coral: [number, number, number] = [255, 94, 98];
     const magenta: [number, number, number] = [255, 70, 200];
@@ -254,7 +297,7 @@ export class NeonScene {
     // Meter rail: from where the fist closed, up one full build of travel.
     if (f.build) {
       const railBottom = from.y;
-      const railTop = from.y - BUILD_TRAVEL * ch;
+      const railTop = from.y - f.build.travel * ch;
       const x = from.x + ch * 0.07;
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
@@ -283,7 +326,7 @@ export class NeonScene {
       ctx.stroke();
     }
 
-    // Energy ball on the fist (or at the slam point while the drop is pending).
+    // Energy ball on the fist (or where the hand let go while the drop is pending).
     const r = ch * (0.025 + 0.05 * e) * (1 + 0.1 * this.pulse);
     ctx.globalCompositeOperation = 'lighter';
     const halo = ctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, r * 2.4);
@@ -319,14 +362,14 @@ export class NeonScene {
     if (f.perf.dropPending && f.perf.dropAtMs !== null) {
       const beatMs = f.beat ? 60000 / f.beat.bpm : 0;
       label = beatMs ? `DROP IN ${Math.max(1, Math.ceil((f.perf.dropAtMs - f.nowMs) / beatMs))}` : 'DROP';
-      sub = f.perf.dropQuantized ? 'ON THE BAR' : 'NO BEAT GRID';
+      sub = f.perf.dropQuantized ? 'ON THE BEAT' : 'NO BEAT GRID';
     } else if (this.impact > 0) {
       label = 'DROP';
     } else if (f.build?.state === 'armed') {
       label = 'LIFT ▲ TO BUILD';
     } else if (f.build?.state === 'building') {
       label = `BUILD ${Math.round(f.build.value * 100)}`;
-      sub = f.build.value >= RELEASE_DROP_MIN ? 'LET GO (OR PULL DOWN) TO DROP' : 'KEEP LIFTING · PULL DOWN TO DROP';
+      sub = f.build.value >= RELEASE_DROP_MIN ? 'OPEN YOUR HAND TO DROP' : 'KEEP LIFTING';
     }
     // Ready to drop: pulsing down-arrows under the fist.
     let ly = p.y + r * 2.4 + fs;
@@ -355,6 +398,63 @@ export class NeonScene {
       ctx.font = `600 ${fs * 0.75}px ui-monospace, "SF Mono", Menlo, monospace`;
       ctx.fillStyle = 'rgba(245,240,255,0.65)';
       ctx.fillText(sub, p.x, ly + fs * 1.3);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The wave along the bottom of the screen. While building, a low shimmer rises with
+   * the energy. On the drop, a big wave rolls out both ways from where the hand let go
+   * and swells on each beat as it settles, in three layers (pink, cyan, violet).
+   */
+  private drawWave(ctx: CanvasRenderingContext2D, cw: number, ch: number, u: number): void {
+    const x0 = this.origin(cw, ch).x;
+    const s = Math.max(0, this.wave); // 0 at the hit -> 1
+    const rolling = this.wave >= 0;
+    // Wave front: a tall crest surges out to both edges in the first third, and the floor
+    // behind it keeps rolling, swelling on each beat as it settles.
+    const front = rolling ? 1.5 * (1 - (1 - Math.min(1, s * 3)) ** 2) : 0;
+    const crest = rolling ? 1.6 * (1 - s) : 0;
+    const swell = rolling ? (1 - s) ** 1.4 * (0.6 + 0.9 * this.pulse) : 0;
+    const shimmer = rolling ? 0 : 0.4 * this.energy ** 1.3 * (0.8 + 0.3 * this.pulse);
+    const t = this.wavePhase;
+    const layers: [rgb: [number, number, number], amp: number, k: number, speed: number, phase: number][] = [
+      [[255, 90, 200], 1, 2.6, 2.2, 0],
+      [[90, 220, 255], 0.75, 3.4, -2.8, 1.7],
+      [[170, 110, 255], 0.55, 4.6, 3.6, 3.1],
+    ];
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [rgb, amp, k, speed, phase] of layers) {
+      const A = ch * 0.26 * amp;
+      const pts: Point2[] = [];
+      for (let x = 0; x <= cw + 8; x += 8) {
+        const d = Math.abs(x - x0) / cw; // 0 at the hand, ~1 at the far edge
+        const reached = rolling ? Math.min(1, Math.max(0, (front - d) / 0.12)) : 1;
+        const surge = crest * Math.exp(-(((d - (front - 0.06)) / 0.07) ** 2));
+        const env = reached * (swell * Math.exp(-d * 0.7) + shimmer) + surge;
+        const wave = 0.5 + 0.5 * Math.sin(2 * Math.PI * (d * k - t * speed * 0.5) + phase);
+        pts.push({ x, y: ch - A * env * (0.35 + 0.65 * wave) - u * 2 });
+      }
+      const top = Math.min(...pts.map((p) => p.y));
+      const fill = ctx.createLinearGradient(0, top, 0, ch);
+      fill.addColorStop(0, rgba(rgb, 0.4 * amp));
+      fill.addColorStop(1, rgba(rgb, 0.02));
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.moveTo(0, ch);
+      for (const p of pts) ctx.lineTo(p.x, p.y);
+      ctx.lineTo(cw, ch);
+      ctx.closePath();
+      ctx.fill();
+      // Bright crest line.
+      ctx.strokeStyle = rgba(rgb, 0.85 * amp);
+      ctx.lineWidth = u * (2.5 + 2 * (rolling ? 1 - s : 0));
+      ctx.shadowColor = rgba(rgb, 0.9);
+      ctx.shadowBlur = u * 14;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.stroke();
     }
     ctx.restore();
   }

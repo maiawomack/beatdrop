@@ -32,8 +32,15 @@ export const LEVEL_TRAVEL = 0.4;
 /** Hand jitter (view-height units) ignored before the fader starts moving. */
 export const LEVEL_DEADZONE = 0.02;
 // --- Open-palm controls -------------------------------------------------------
-/** An open palm facing the camera must be held this long before it takes a record (ms), so passing hands don't scratch. */
-export const SCRATCH_ARM_MS = 200;
+/**
+ * An open palm facing the camera must be held still this long before it takes a record (ms),
+ * so hands passing by, reaching for a drink or opening after a drop don't scratch.
+ */
+export const SCRATCH_ARM_MS = 450;
+/** While arming, the palm must stay within this distance of where it started (view-height units). */
+export const SCRATCH_ARM_STILL = 0.05;
+/** No palm scratch this soon after the hand's lift pose or a drop (ms): opening the hand to drop isn't a scratch. */
+export const SCRATCH_AFTER_LIFT_MS = 1200;
 /** Extra reach around a record for the palm or pinch (view-height units). */
 const PLATTER_PAD = 0.06;
 /** A pinch this close to a fader bar's fill line (above / below, view-height units) grabs it. */
@@ -128,23 +135,24 @@ const FILTER_DEADZONE = 0.02;
 const FILTER_DETENT = 0.06;
 /** Max filter change per second, so a tracking glitch can't slam the filter. */
 export const FILTER_MAX_RATE = 4;
-/** Vertical travel (view-height units) above the grab point for a full build. */
-export const BUILD_TRAVEL = 0.35;
-/** The build must reach this before a slam counts as a drop. */
+/**
+ * Vertical travel (view-height units) above where the lift pose started for a full build:
+ * a long pull. Starting high, it shortens (to BUILD_TRAVEL_MIN at least) so the top of
+ * the build stays reachable inside the frame.
+ */
+export const BUILD_TRAVEL = 0.55;
+export const BUILD_TRAVEL_MIN = 0.25;
+/** Below this the lift pose is armed but not building yet; from here, letting go drops. */
 export const BUILD_MIN = 0.25;
-/** Build rate limits (1/s): rises quickly, falls slowly so a slam keeps its peak. */
+/** Build rate limits (1/s): rises quickly, falls slowly so dipping the hand before letting go keeps the build. */
 const BUILD_RISE_RATE = 4;
 const BUILD_FALL_RATE = 0.9;
-/**
- * Pull-down = the fist moves down at least SLAM_DIST within SLAM_WINDOW_MS,
- * averaging SLAM_SPEED or faster. Deliberately moderate: a hard slam blurs
- * the camera and loses tracking, and a lost hand never drops.
- */
-export const SLAM_DIST = 0.07;
-export const SLAM_WINDOW_MS = 300;
-export const SLAM_SPEED = 0.35;
-/** Opening the fist with at least this much build also drops ("let it go"). Below it, opening cancels. */
-export const RELEASE_DROP_MIN = 0.5;
+/** Letting go of the lift pose with at least this much build drops (below it, it cancels). */
+export const RELEASE_DROP_MIN = BUILD_MIN;
+/** A build hand lost above this line (view y) went out the top of the frame: that cancels, never drops. */
+const BUILD_TOP_EDGE = 0.08;
+/** Full build is reachable this far below the top of the frame (view y). */
+const BUILD_TOP_REACH = 0.12;
 /** Minimum time between drops (ms). */
 export const DROP_COOLDOWN_MS = 1500;
 /** Drag the loop cap this far sideways (view-height units) to pull a loop clip out of the stem. */
@@ -191,9 +199,11 @@ export interface BuildView {
   /** Current build amount 0..1 (what the engine was asked for). */
   value: number;
   state: 'armed' | 'building' | 'dropped';
-  /** Hand anchor where the fist closed, and now (view space). */
+  /** Hand anchor where the lift pose started, and now (view space). */
   from: Point2;
   point: Point2;
+  /** Height (view units) above `from` for a full build. */
+  travel: number;
 }
 
 export type InteractionEvent =
@@ -307,8 +317,8 @@ interface BuildGrab {
   from: Point2;
   value: number;
   dropped: boolean;
-  /** Tracked anchor samples, for slam detection. */
-  history: Sample[];
+  /** Travel for a full build from where this one started. */
+  travel: number;
 }
 
 interface ScratchGrab {
@@ -414,7 +424,9 @@ export class InteractionController {
   /** Live crossfader value while a palm holds it (for visuals). */
   crossfadeValue: number | null = null;
   /** Per hand: since when an open palm has been arming a record or the crossfader. */
-  private palmArm = new Map<HandId, { kind: 'scratch'; since: number; platter?: Platter }>();
+  private palmArm = new Map<HandId, { kind: 'scratch'; since: number; start: Point2; platter?: Platter }>();
+  /** When each hand was last in the lift pose (build/drop), to keep the drop's open hand from scratching. */
+  private lastLift = new Map<HandId, number>();
   /** Per hand: since when a pinch has been arming the crossfader. */
   private pinchArm = new Map<HandId, number>();
   /** Per hand: since when two fingers up have been arming the crossfader. */
@@ -426,7 +438,6 @@ export class InteractionController {
   /** Current state of each hand in the frame. */
   readonly handModes = new Map<HandId, HandMode>();
   private lastDropT = -Infinity;
-  private buildHistory = new Map<string, Sample[]>();
   private clipSeq = 0;
   private clipSpawns = new Map<string, Point2>();
 
@@ -495,6 +506,7 @@ export class InteractionController {
     for (const hand of frame.hands) {
       const phase = hand[this.gesture].phase;
       this.pinchPoints.set(hand.id, { ...hand.pinch.point });
+      if (hand.lift?.active) this.lastLift.set(hand.id, t);
       // Two fingers up (✌) takes the crossfader.
       if (hand.twoUp?.active && !hand.lift?.active) {
         this.armTwoUp(hand, t);
@@ -515,7 +527,7 @@ export class InteractionController {
       this.palmArm.delete(hand.id);
       // The lift pose starts a build (one at a time), and never grabs stems.
       if (hand.lift?.active) {
-        if (this.buildEnabled && hand.tracked && !this.grabs.has(hand.id) && !this.build) this.startBuild(hand.id, t);
+        if (this.buildEnabled && hand.tracked && !this.grabs.has(hand.id) && !this.build) this.startBuild(hand.id);
         this.gestureStart.delete(hand.id);
         continue;
       }
@@ -537,7 +549,7 @@ export class InteractionController {
       if (!state.tracked) continue;
       if (g.kind === 'loop') this.adjustLoop(hand, g);
       if (g.kind === 'filter') this.adjustFilter(hand, g, dt);
-      if (g.kind === 'build') this.adjustBuild(hand, g, t, dt);
+      if (g.kind === 'build') this.adjustBuild(hand, g, dt);
       if (g.kind === 'scratch') this.adjustScratch(hand, g, points, state.roll);
       if (g.kind === 'crossfade') this.adjustFade(hand, g, dt);
       if (g.kind === 'fader') this.adjustFader(hand, g, dt);
@@ -574,9 +586,18 @@ export class InteractionController {
 
   // --- Open-palm controls: records and crossfader -----------------------------
 
-  /** An open palm: arm (and then take) the record under it, or the crossfader if held still in its zone. */
+  /**
+   * An open palm: arm, then take, the record under it (or the deck on its side). It has to be
+   * a deliberate pose: facing the camera, held still for SCRATCH_ARM_MS, and not right after
+   * a lift or a drop.
+   */
   private armPalm(hand: HandState, t: number): void {
     if (!hand.tracked || this.grabs.has(hand.id)) return;
+    const sinceLift = t - Math.max(this.lastLift.get(hand.id) ?? -Infinity, this.lastDropT);
+    if (hand.facing === false || sinceLift < SCRATCH_AFTER_LIFT_MS) {
+      this.palmArm.delete(hand.id);
+      return;
+    }
     const p = hand.palm!.point;
     // On a record: that record. Anywhere else: the deck on that side of the screen.
     const onRecord = this.platters.find((pl) => !pl.hand && viewDist(p, pl.position, this.aspect) <= pl.radius + PLATTER_PAD);
@@ -587,8 +608,9 @@ export class InteractionController {
       this.palmArm.delete(hand.id);
       return;
     }
-    if (!arm || arm.kind !== kind || arm.platter !== platter) {
-      this.palmArm.set(hand.id, { kind, since: t, platter: platter ?? undefined });
+    // Moving restarts the hold: a hand on its way somewhere (a drink, the next gesture) never arms.
+    if (!arm || arm.kind !== kind || arm.platter !== platter || viewDist(p, arm.start, this.aspect) > SCRATCH_ARM_STILL) {
+      this.palmArm.set(hand.id, { kind, since: t, start: { ...p }, platter: platter ?? undefined });
       return;
     }
     if (t - arm.since < SCRATCH_ARM_MS || !platter) return;
@@ -936,14 +958,15 @@ export class InteractionController {
     this.onEvent({ type: target.holders.length === 1 ? 'grab' : 'stretchStart', object: target, hand: hand.id });
   }
 
-  private startBuild(hand: HandId, t: number): void {
+  private startBuild(hand: HandId): void {
     const from = this.dragPoints.get(hand)!;
-    const g: BuildGrab = { kind: 'build', startY: from.y, from: { ...from }, value: 0, dropped: false, history: [] };
+    const travel = Math.max(BUILD_TRAVEL_MIN, Math.min(BUILD_TRAVEL, from.y - BUILD_TOP_REACH));
+    const g: BuildGrab = { kind: 'build', startY: from.y, from: { ...from }, value: 0, dropped: false, travel };
     this.grabs.set(hand, g);
     this.targets.delete(hand);
-    this.build = { hand, value: 0, state: 'armed', from: { ...from }, point: { ...this.dragPoints.get(hand)! } };
+    this.build = { hand, value: 0, state: 'armed', from: { ...from }, point: { ...this.dragPoints.get(hand)! }, travel };
     this.onEvent({ type: 'buildStart', hand });
-    this.adjustBuild(hand, g, t, 0);
+    this.adjustBuild(hand, g, 0);
   }
 
   /** @param lost the hand was lost (not deliberately opened): cancel rather than commit. */
@@ -979,15 +1002,13 @@ export class InteractionController {
       return;
     }
     if (g.kind === 'build') {
-      // Opening the hand mid-slam still drops; losing the hand never does.
-      const p = this.dragPoints.get(hand);
-      if (!g.dropped && !lost && p) {
-        record(this.buildHistory, 'core', t, p);
-        g.history = this.buildHistory.get('core')!;
-        const offCooldown = t - this.lastDropT >= DROP_COOLDOWN_MS;
-        if (this.isSlam(g, t) || (g.value >= RELEASE_DROP_MIN && offCooldown)) this.fireDrop(hand, g, t);
-      }
-      this.buildHistory.delete('core');
+      // Letting go of the lift pose is the drop, once it's building. A hand that vanishes
+      // (fast opening blurs the camera) counts as letting go too, unless it left through
+      // the top of the frame. To cancel, lower the hand first: the build falls with it.
+      const offCooldown = t - this.lastDropT >= DROP_COOLDOWN_MS;
+      const p = this.dragPoints.get(hand) ?? this.build?.point;
+      const outTheTop = lost && (!p || p.y < BUILD_TOP_EDGE);
+      if (!g.dropped && !outTheTop && g.value >= RELEASE_DROP_MIN && offCooldown) this.fireDrop(hand, g, t);
       this.build = null;
       this.onEvent({ type: 'buildEnd', hand, dropped: g.dropped });
       return;
@@ -1194,19 +1215,12 @@ export class InteractionController {
     this.onEvent({ type: 'filter', object: g.object, hand, value });
   }
 
-  /** Build fist: raise to build (rate-limited), slam down to drop. */
-  private adjustBuild(hand: HandId, g: BuildGrab, t: number, dt: number): void {
+  /** Lift pose: raise to build (rate-limited). The drop is letting go (see release). */
+  private adjustBuild(hand: HandId, g: BuildGrab, dt: number): void {
     const p = this.dragPoints.get(hand)!;
-    record(this.buildHistory, 'core', t, p);
-    g.history = this.buildHistory.get('core')!;
     if (this.build) this.build.point = { ...p };
     if (g.dropped) return;
-
-    if (this.isSlam(g, t)) {
-      this.fireDrop(hand, g, t);
-      return;
-    }
-    const target = clamp01((g.startY - p.y) / BUILD_TRAVEL);
+    const target = clamp01((g.startY - p.y) / g.travel);
     const step = Math.max(dt, 1 / 60);
     const value = target > g.value ? Math.min(target, g.value + BUILD_RISE_RATE * step) : Math.max(target, g.value - BUILD_FALL_RATE * step);
     if (value !== g.value) {
@@ -1217,21 +1231,6 @@ export class InteractionController {
       this.build.value = value;
       this.build.state = value >= BUILD_MIN ? 'building' : 'armed';
     }
-  }
-
-  /** A fast, deliberate downward motion of the build hand, with enough build and off cooldown. */
-  private isSlam(g: BuildGrab, t: number): boolean {
-    if (g.value < BUILD_MIN || t - this.lastDropT < DROP_COOLDOWN_MS) return false;
-    const h = g.history;
-    if (h.length < 2) return false;
-    const now = h[h.length - 1];
-    for (const s of h) {
-      const dtMs = now.t - s.t;
-      if (dtMs <= 0 || dtMs > SLAM_WINDOW_MS) continue;
-      const down = now.p.y - s.p.y;
-      if (down >= SLAM_DIST && (down * 1000) / dtMs >= SLAM_SPEED) return true;
-    }
-    return false;
   }
 
   private fireDrop(hand: HandId, g: BuildGrab, t: number): void {

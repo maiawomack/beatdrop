@@ -18,7 +18,7 @@ const EPSILON = 0.005;
  *   clip back into stem  -> removeClip
  *   twist while holding  -> setFilter (same as the filter cap)
  *   filter cap           -> setFilter while moving; held on release
- *   build core           -> setBuild while raising, drop on slam, setBuild(0) on cancel
+ *   build core           -> setBuild while raising, drop on letting go, setBuild(0) on cancel
  *   palm on a record     -> scratch start / move / end
  *   fingers up + slide   -> setCrossfader
  *   pinch a tempo strip  -> setTempo (tap = back to ×1.00)

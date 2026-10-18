@@ -1,4 +1,5 @@
 import { EQ_BANDS, STEM_IDS, type ChannelKey, type EqBand, type LoopState, type StemId } from '../shared/types';
+import { SCRATCH_PROCESSOR, loadScratchProcessor, scratchReady } from './scratchVoice';
 
 type BufferKey = ChannelKey;
 
@@ -38,7 +39,10 @@ export class DeckChannel {
   private readonly lanes: Record<BufferKey, Lane>;
   /** Everything that normally plays (stems, full mix, clips) passes here; a scratch mutes it. */
   private readonly live: GainNode;
-  private scrub: { node: AudioWorkletNode; startPos: number; windowStart: number; sampleRate: number; offset: number } | null = null;
+  /** Track position where the current scratch started (offsets are relative to it). */
+  private scrubOrigin = 0;
+  /** The scratch voice while a hand is on the record (scratchVoice.ts). */
+  private scrub: { node: AudioWorkletNode; windowStart: number; sampleRate: number; pos: number } | null = null;
   private readonly clips = new Map<string, Clip>();
   private envelopes: Partial<Record<BufferKey, Float32Array>> = {};
   private readonly scratch = new Float32Array(1024);
@@ -421,13 +425,14 @@ export class DeckChannel {
   }
 
   /**
-   * Hand on the record: mute the live sound (it keeps running underneath, so
-   * releasing lands where the song would have been) and start the scrub voice
-   * on a mix of the audible channels around the playhead. Returns false if
-   * there's nothing loaded or the scrub processor isn't ready yet.
+   * Hand on the record: the scratch voice takes over from the live sound at the same
+   * position and speed (so grabbing a playing record brakes it), on a mix of the audible
+   * channels around the playhead. The live sound keeps running muted underneath, so
+   * letting go lands where the song would have been and the deck stays in sync.
+   * Returns false if there's nothing loaded or the processor isn't ready yet.
    */
   startScratch(): boolean {
-    if (this.scrub || !scrubReady.has(this.ctx) || this.duration === 0) return false;
+    if (this.scrub || !scratchReady(this.ctx) || this.duration === 0) return false;
     const keys: BufferKey[] = this.hasStems ? STEM_IDS.filter((s) => this.buffers[s]) : ['full'];
     const first = this.buffers[keys[0]!]!;
     const sr = first.sampleRate;
@@ -435,7 +440,7 @@ export class DeckChannel {
     const windowStart = Math.max(0, pos - SCRUB_WINDOW_SEC);
     const windowEnd = Math.min(this.duration, pos + SCRUB_WINDOW_SEC);
     const from = Math.floor(windowStart * sr);
-    const n = Math.max(2, Math.floor((windowEnd - windowStart) * sr));
+    const n = Math.max(4, Math.floor((windowEnd - windowStart) * sr));
     const left = new Float32Array(n);
     const right = new Float32Array(n);
     for (const key of keys) {
@@ -450,40 +455,52 @@ export class DeckChannel {
         right[i]! += r[from + i]! * weight;
       }
     }
-    const node = new AudioWorkletNode(this.ctx, SCRUB_PROCESSOR, { outputChannelCount: [2] });
-    node.port.postMessage({ type: 'load', left, right, pos: (pos - windowStart) * sr, rate: sr / this.ctx.sampleRate }, [
-      left.buffer,
-      right.buffer,
-    ]);
+    const node = new AudioWorkletNode(this.ctx, SCRATCH_PROCESSOR, { outputChannelCount: [2] });
+    const scrub = { node, windowStart, sampleRate: sr, pos };
+    this.scrubOrigin = pos;
+    node.port.onmessage = (e: MessageEvent<{ type: string; pos?: number }>) => {
+      if (e.data.type === 'pos') scrub.pos = windowStart + e.data.pos! / sr;
+      else if (e.data.type === 'done') node.disconnect();
+    };
+    node.port.postMessage(
+      { type: 'load', left, right, pos: (pos - windowStart) * sr, srcRate: sr / this.ctx.sampleRate, spin: this.spin },
+      [left.buffer, right.buffer],
+    );
     node.connect(this.input);
+    // Same audio at the same position: a short crossfade is seamless.
     this.live.gain.setTargetAtTime(0, this.ctx.currentTime, 0.004);
-    this.scrub = { node, startPos: pos, windowStart, sampleRate: sr, offset: 0 };
+    this.scrub = scrub;
     return true;
   }
 
-  /** Move the record: play toward `offsetSec` from where the scratch started (negative = backwards). */
+  /** The hand moved the record to `offsetSec` from where the scratch started (negative = back). */
   moveScratch(offsetSec: number): void {
     if (!this.scrub) return;
-    this.scrub.offset = offsetSec;
-    // Target in the window's source samples.
-    const target = (this.scrub.startPos + offsetSec - this.scrub.windowStart) * this.scrub.sampleRate;
-    this.scrub.node.port.postMessage({ type: 'target', pos: target });
+    this.scrub.node.port.postMessage({ type: 'target', pos: (this.scrubOrigin + offsetSec - this.scrub.windowStart) * this.scrub.sampleRate });
   }
 
   /** Where the record is while a hand scratches it (what you hear), or null when not scratching. */
   scratchPosition(): number | null {
     if (!this.scrub) return null;
-    return Math.max(0, Math.min(this.duration, this.scrub.startPos + this.scrub.offset));
+    return Math.max(0, Math.min(this.duration, this.scrub.pos));
   }
 
-  /** Lift off: the live sound comes back where the song would have been. */
+  /**
+   * Lift off: the platter spins back up as the scratch voice fades, and the live sound
+   * (which kept running) fades back in where the song would have been.
+   */
   endScratch(): void {
     if (!this.scrub) return;
     const { node } = this.scrub;
     this.scrub = null;
-    node.port.postMessage({ type: 'stop' });
-    this.live.gain.setTargetAtTime(1, this.ctx.currentTime, 0.006);
-    setTimeout(() => node.disconnect(), 100);
+    node.port.postMessage({ type: 'release', spin: this.spin });
+    this.live.gain.setTargetAtTime(1, this.ctx.currentTime, 0.02);
+    setTimeout(() => node.disconnect(), 800); // fallback; normally on 'done'
+  }
+
+  /** Normal record speed right now: the deck's rate while playing, still when paused. */
+  private get spin(): number {
+    return this._playing ? this.rate : 0;
   }
 
   /** Stop a clip on the next beat (now if paused / no grid). Returns that context time. */
@@ -675,80 +692,10 @@ function mod(a: number, n: number): number {
   return n > 0 ? ((a % n) + n) % n : 0;
 }
 
-// --- Scrub voice (AudioWorklet) --------------------------------------------
+// --- Scratch voice ----------------------------------------------------------
 
-const SCRUB_PROCESSOR = 'beatdrop-scrub';
 /** Audio kept either side of the playhead for scratching (s). */
 const SCRUB_WINDOW_SEC = 6;
-const scrubReady = new WeakSet<BaseAudioContext>();
-const scrubLoading = new WeakMap<BaseAudioContext, Promise<void>>();
 
-/**
- * The record under your hand: plays a window of audio at a variable speed,
- * following target positions (in source samples) with a little inertia.
- * Speed can go negative (backwards); standing still is silent.
- */
-const SCRUB_SOURCE = `
-class Scrub extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.l = null; this.r = null; this.pos = 0; this.target = 0; this.vel = 0; this.gain = 0; this.rate = 1;
-    // Hand positions arrive ~30x/s; between them the target keeps moving at the hand's last speed
-    // (for at most one interval), so fast scratches sound smooth instead of stepped.
-    this.lastTarget = 0; this.lastAt = 0; this.tvel = 0; this.predict = 0;
-    this.port.onmessage = (e) => {
-      const d = e.data;
-      if (d.type === 'load') {
-        this.l = d.left; this.r = d.right; this.pos = d.pos; this.target = d.pos; this.lastTarget = d.pos;
-        this.vel = 0; this.tvel = 0; this.predict = 0; this.rate = d.rate; this.lastAt = currentFrame;
-      } else if (d.type === 'target') {
-        const gap = currentFrame - this.lastAt;
-        this.tvel = gap > 0 && gap < sampleRate * 0.15 ? (d.pos - this.lastTarget) / gap : 0;
-        this.predict = gap > 0 && gap < sampleRate * 0.15 ? gap : 0;
-        this.lastTarget = d.pos; this.target = d.pos; this.lastAt = currentFrame;
-      } else if (d.type === 'stop') this.l = null;
-    };
-  }
-  process(_inputs, outputs) {
-    const out = outputs[0];
-    const L = out[0];
-    const R = out[1] || out[0];
-    if (!this.l) { L.fill(0); if (R !== L) R.fill(0); return true; }
-    const len = this.l.length;
-    for (let i = 0; i < L.length; i++) {
-      if (this.predict > 0) { this.target += this.tvel; this.predict--; }
-      // Chase the hand: speed toward the target (fast enough for quick scratches), lightly smoothed.
-      const want = Math.max(-8, Math.min(8, (this.target - this.pos) * 0.0025));
-      this.vel += (want - this.vel) * 0.02;
-      this.pos += this.vel * this.rate;
-      if (this.pos < 0) { this.pos = 0; this.vel = 0; }
-      if (this.pos > len - 2) { this.pos = len - 2; this.vel = 0; }
-      const i0 = Math.floor(this.pos);
-      const f = this.pos - i0;
-      this.gain += (Math.min(1, Math.abs(this.vel) * 3) - this.gain) * 0.01;
-      L[i] = (this.l[i0] * (1 - f) + this.l[i0 + 1] * f) * this.gain;
-      if (R !== L) R[i] = (this.r[i0] * (1 - f) + this.r[i0 + 1] * f) * this.gain;
-    }
-    return true;
-  }
-}
-registerProcessor('${SCRUB_PROCESSOR}', Scrub);
-`;
-
-/** Load the scrub processor into a context (once). Scratching works after this resolves. */
-export function loadScrubProcessor(ctx: BaseAudioContext): Promise<void> {
-  if (!ctx.audioWorklet) return Promise.resolve();
-  let p = scrubLoading.get(ctx);
-  if (!p) {
-    const url = URL.createObjectURL(new Blob([SCRUB_SOURCE], { type: 'application/javascript' }));
-    p = ctx.audioWorklet
-      .addModule(url)
-      .then(() => {
-        scrubReady.add(ctx);
-      })
-      .catch((err) => console.warn('[audio] scratch unavailable:', err))
-      .finally(() => URL.revokeObjectURL(url));
-    scrubLoading.set(ctx, p);
-  }
-  return p;
-}
+/** Load the scratch processor into a context (once); see scratchVoice.ts. */
+export const loadScrubProcessor = loadScratchProcessor;

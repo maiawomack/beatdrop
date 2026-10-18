@@ -65,16 +65,13 @@ describe('build → drop', () => {
     expect(rig.engine.stems.get('bass')!.muted).toBe(true);
   });
 
-  it('a slam drops exactly once, and the mix comes back exactly as it was', () => {
+  it('letting go drops exactly once, and the mix comes back exactly as it was', () => {
     rig.engine.dispatch({ type: 'setVolume', stemId: 'drums', value: 0.6 });
     rig.engine.dispatch({ type: 'setMute', stemId: 'bass', value: true });
     const before = structuredClone(Object.fromEntries(rig.engine.stems));
     const top = raise(0.9);
-    // Slam down, keep going, slam again while still holding.
-    liftMove(top, { x: top.x, y: top.y + 0.25 }, 3);
-    liftMove({ x: top.x, y: top.y + 0.25 }, top, 6);
-    liftMove(top, { x: top.x, y: top.y + 0.25 }, 3);
-    rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.25 }, 'end'));
+    rig.frame(liftHand('Right', top, 'end'));
+    rig.frame(liftHand('Right', top, 'idle'));
 
     expect(rig.commands('drop')).toHaveLength(1);
     expect(rig.eventsOf('buildEnd')[0].dropped).toBe(true);
@@ -86,25 +83,27 @@ describe('build → drop', () => {
     expect(Object.fromEntries(rig.engine.stems)).toEqual(before);
   });
 
-  it('opening the hand during the slam still drops', () => {
+  it('opening the hand while bringing it down still drops', () => {
     const top = raise(0.8);
     rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.08 }, 'held'));
     rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.18 }, 'end'));
     expect(rig.commands('drop')).toHaveLength(1);
   });
 
-  it('a moderate pull-down (not a hard slam) drops', () => {
-    const top = raise(0.6);
-    liftMove(top, { x: top.x, y: top.y + 0.09 }, 6); // 0.09 over ~200 ms
+  it('pulling down without letting go never drops (only opening the hand does)', () => {
+    const top = raise(0.9);
+    liftMove(top, { x: top.x, y: top.y + 0.25 }, 3); // fast pull-down, still in the lift pose
+    expect(rig.commands('drop')).toHaveLength(0);
+    rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.25 }, 'end'));
     expect(rig.commands('drop')).toHaveLength(1);
   });
 
-  it('opening the fist after a big build drops; after a small build it cancels', () => {
-    const top = raise(0.8);
+  it('letting go once it is building drops; a barely-raised hand cancels', () => {
+    const top = raise(0.3);
     rig.frame(liftHand('Right', top, 'end'));
     expect(rig.commands('drop')).toHaveLength(1);
     for (let i = 0; i < 60; i++) rig.frame(); // cooldown
-    const low = raise(0.3);
+    const low = raise(0.15);
     rig.frame(liftHand('Right', low, 'end'));
     expect(rig.commands('drop')).toHaveLength(1);
     expect(rig.engine.perf.build).toBe(0);
@@ -120,19 +119,34 @@ describe('build → drop', () => {
     expect(rig.engine.perf.build).toBe(0);
   });
 
-  it('a slam without enough build does nothing', () => {
+  it('letting go without enough build cancels instead of dropping', () => {
     const top = raise(0.1);
     liftMove(top, { x: top.x, y: top.y + 0.25 }, 2);
     rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.25 }, 'end'));
     expect(rig.commands('drop')).toHaveLength(0);
   });
 
-  it('losing the hand (arm dropping out of frame) cancels the build and never drops', () => {
+  it('a hand that vanishes while letting go (camera blur) still drops', () => {
     const top = raise(0.9);
-    liftMove(top, { x: top.x, y: 1 }, 2, false);
-    rig.frame(liftHand('Right', { x: top.x, y: 1 }, 'end', false));
+    liftMove(top, { x: top.x, y: top.y + 0.1 }, 2, false);
+    rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.1 }, 'end', false));
+    expect(rig.commands('drop')).toHaveLength(1);
+  });
+
+  it('a hand raised out the top of the frame cancels instead of dropping', () => {
+    const top = raise(0.9);
+    liftMove(top, { x: top.x, y: 0.02 }, 4, false);
+    rig.frame(liftHand('Right', { x: top.x, y: 0.02 }, 'end', false));
     expect(rig.commands('drop')).toHaveLength(0);
     expect(rig.engine.perf.build).toBe(0);
+  });
+
+  it('starting high still reaches a full build inside the frame', () => {
+    core = { x: 0.62, y: 0.4 };
+    rig.frame(liftHand('Right', core, 'start'));
+    moveTo(rig, 'Right', core, { x: core.x, y: 0.1 }, 20, true, liftHand);
+    for (let i = 0; i < 4; i++) rig.frame(liftHand('Right', { x: core.x, y: 0.1 }, 'held'));
+    expect(rig.engine.perf.build).toBeGreaterThan(0.95);
   });
 
   it('drops have a cooldown', () => {
@@ -146,7 +160,7 @@ describe('build → drop', () => {
     expect(rig.commands('drop')).toHaveLength(1);
   });
 
-  it('slamming while dragging a stem never drops', () => {
+  it('moving a stem up and down never builds or drops', () => {
     const drums = rig.stem('drums');
     const p = { ...drums.position };
     grabAt(rig, 'Left', p);
@@ -183,13 +197,14 @@ describe('build → drop', () => {
     expect(rig.engine.perf.build).toBeGreaterThan(0.3);
   });
 
-  it('reports drop-pending while the engine waits for the bar', () => {
+  it('reports drop-pending while the engine waits for the beat (the hand is already free)', () => {
     rig.engine.holdDrops = true;
     const top = raise(0.9);
-    liftMove(top, { x: top.x, y: top.y + 0.25 }, 2);
-    rig.frame(liftHand('Right', { x: top.x, y: top.y + 0.25 }, 'held'));
-    expect(rig.controller.handModes.get('Right')).toBe('dropPending');
+    rig.frame(liftHand('Right', top, 'end'));
+    rig.frame(hand('Right', top, 'idle'));
     expect(rig.engine.perf.dropPending).toBe(true);
+    expect(rig.eventsOf('buildEnd')[0].dropped).toBe(true);
+    expect(rig.controller.handModes.get('Right')).toBe('idle');
     rig.engine.landDrop();
     expect(rig.engine.perf.drops).toBe(1);
   });
