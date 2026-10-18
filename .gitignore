@@ -18,3 +18,13 @@ __pycache__/
 /mp3/.stems/.*
 /public/stems/*
 !/public/stems/README.md
+allin1-env/
+__pycache__/
+struct/
+viz/
+spec/
+demix/
+separated/
+output/
+*.wav
+*.mp3
