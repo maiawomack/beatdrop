@@ -25,7 +25,8 @@ interface Job {
   error: string | null;
 }
 
-const STEMS_INDEX = '/stems/index.json';
+/** All split tracks, including ones whose song file isn't in mp3/ (served by the library). */
+const STEMS_INDEX = '/api/library/stems/index.json';
 
 /** The stems folder id inside a manifest URL (".../<id>/manifest.json"). */
 function stemsIdOf(manifestUrl: string | null): string | null {
@@ -130,7 +131,7 @@ export const DeckSearch = forwardRef<DeckSearchHandle, Props>(function DeckSearc
 
   const separateFile = (file: File) =>
     void runSplit(file.name, async (onProgress) => {
-      await separateAudio(file, { onProgress });
+      await separateAudio(file, { onProgress, saveToLibrary: true });
       return null;
     });
 

@@ -28,6 +28,8 @@ export interface SeparateOptions {
   /** Defaults to the file name. */
   title?: string;
   artist?: string;
+  /** Also store the uploaded file in the music library (mp3/) so it's shared with the team. */
+  saveToLibrary?: boolean;
   /** Only separate part of the song (saves time and browser memory). */
   startSec?: number;
   durationSec?: number;
@@ -55,6 +57,7 @@ export async function separateAudio(file: Blob, options: SeparateOptions = {}): 
     artist: options.artist,
     start: options.startSec,
     duration: options.durationSec,
+    save: options.saveToLibrary ? 1 : undefined,
   };
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') url.searchParams.set(key, String(value));

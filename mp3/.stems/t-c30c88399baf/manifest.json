@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-c30c88399baf",
+  "title": "BAILE INoLVIDABLE",
+  "artist": "Bad Bunny",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 16217089,
+  "durationSec": 367.7344,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 367.7344,
+  "bpm": 90.0,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.1945,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.77,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.28,
+      "rmsDb": -20.82
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.28,
+      "rmsDb": -24.33
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.85,
+      "rmsDb": -16.79
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.28,
+      "rmsDb": -23.54
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

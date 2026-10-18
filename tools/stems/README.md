@@ -11,7 +11,7 @@ timestamped lyrics from [LRCLIB](https://lrclib.net) when they exist.
 Task 1 (audio engine)                    Task 5 (this)                        
   user picks a song file ──POST file──►  separation_server.py (localhost:8765)
                                            Demucs → align → level → BPM/beat grid
-  loadTrack() ◄──── manifest + stems ───   public/stems/<track-id>/
+  loadTrack() ◄──── manifest + stems ───   mp3/.stems/<track-id>/   (committed with the songs)
   4 AudioBuffers, same length
   one gain node per stem ◄── AudioCommands from the spatial AR layer (Tasks 2 + 4 gestures)
 ```
@@ -97,16 +97,41 @@ original's timing won't match). `--no-lyrics` on `separate` skips the online loo
 `import` is for stems you already have. `--mix` aligns each stem to the full song and
 lets you omit one stem. `--bpm` / `--first-beat` override the beat-grid estimate.
 
+## Keeping the library pre-split
+
+Stems are stored next to the songs in `mp3/.stems/` and committed, so everyone who pulls
+gets songs that load with stems, BPM, waveform and lyrics right away. To fill it in:
+
+```sh
+.venv/bin/python tools/stems/sync_library.py                    # split every song in mp3/ that has no stems
+.venv/bin/python tools/stems/sync_library.py --watch --only-new # keep running; split songs as they're added
+.venv/bin/python tools/stems/sync_library.py --dry-run          # list what would be split
+.venv/bin/python tools/stems/sync_library.py --migrate          # reuse old WAV splits from public/stems
+```
+
+Then commit `mp3/` (the new songs and their `mp3/.stems/<id>/` folders). Splitting takes about
+80 s per 3.5-minute song on CPU, so a full library is a coffee-break job.
+
+Songs uploaded in the app (**+ Split a song file**, or dropping a file on a deck) are saved
+into `mp3/` as `Artist - Title.ext` and split into `mp3/.stems/` too, so they're ready to
+commit as well. Every path names a song's folder the same way (`t-` + a hash of the file),
+which is how the library matches songs to stems.
+
 ## Output
 
 ```
-public/stems/                 (gitignored; served by the server and by a Vite-style dev server)
-  index.json
+mp3/.stems/                   (committed; the library serves it at /api/library/stems/)
   <track-id>/manifest.json    sampleRate, frames, bpm, firstBeatSec, gainDb, stem files
   <track-id>/waveform.json    per-stem peaks, 50 buckets/s, 0-255
   <track-id>/lyrics.json      lyrics, when found (manifest "lyrics" is null otherwise)
-  <track-id>/{vocals,drums,bass,instrumental}.wav
+  <track-id>/cover.jpg        embedded album art, when the file has it
+  <track-id>/{vocals,drums,bass,instrumental}.mp3
+  index.json                  local only (gitignored); the library builds it from the manifests
 ```
+
+Stems are MP3 (~160 kbps), about 15–20 MB per song for all four. Chrome and Safari decode them
+to the exact original length, so they stay sample-aligned. `--format flac` or `--format wav`
+gives lossless stems if you need them (much bigger: ~50 / ~145 MB per song).
 
 Guarantees:
 - All stems of a track share the same sample rate, stereo layout and exact frame count,

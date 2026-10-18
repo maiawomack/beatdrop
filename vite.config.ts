@@ -8,7 +8,8 @@ export default defineConfig({
     react(),
     audioLibrary({
       libraryDir: fileURLToPath(new URL('./mp3', import.meta.url)),
-      stemsDir: fileURLToPath(new URL('./public/stems', import.meta.url)),
+      // Stems are committed next to the songs (tools/stems/sync_library.py keeps them in sync).
+      stemsDir: fileURLToPath(new URL('./mp3/.stems', import.meta.url)),
     }),
   ],
   build: {

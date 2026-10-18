@@ -5,7 +5,8 @@ The web app uploads a raw audio file; this separates it with Demucs through the 
 pipeline as `prepare_stems.py separate` and serves the aligned stems back. It listens
 on 127.0.0.1 only and handles one separation at a time (Demucs uses every CPU core).
 
-    POST /separate?filename=&title=&artist=&start=&duration=   body: the raw file bytes
+    POST /separate?filename=&title=&artist=&start=&duration=&save=1   body: the raw file bytes
+         (save=1 also stores the original in the music library, mp3/, as "Artist - Title.ext")
          -> 202 job (200 with state "done" if this exact audio was separated before)
     GET  /jobs/<id>      -> job
     GET  /tracks         -> index.json of every prepared track
@@ -29,6 +30,7 @@ import hashlib
 import json
 import queue
 import re
+import filecmp
 import shutil
 import subprocess
 import tempfile
@@ -115,8 +117,25 @@ class Separator:
                 shutil.rmtree(upload.parent, ignore_errors=True)
 
 
+def save_to_library(upload: Path, library_dir: Path, title: str | None, artist: str | None,
+                    fallback: str) -> Path:
+    """Copy an uploaded song into the music library, named the way the library parses
+    names ("Artist - Title.ext"). Re-uploading the same file reuses the existing copy."""
+    base = f"{artist} - {title}" if artist and title else (title or fallback)
+    base = " ".join(re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", base).split()).strip(" .") or "Untitled"
+    library_dir.mkdir(parents=True, exist_ok=True)
+    for n in range(1, 100):
+        target = library_dir / f"{base}{'' if n == 1 else f' ({n})'}{upload.suffix}"
+        if not target.exists():
+            shutil.copyfile(upload, target)
+            return target
+        if filecmp.cmp(upload, target, shallow=False):
+            return target  # same song already in the library
+    raise ValueError("too many files with the same name in the library")
+
+
 def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_origins: set[str],
-                 demucs_ok: bool) -> type[BaseHTTPRequestHandler]:
+                 demucs_ok: bool, library_dir: Path | None) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         server_version = "BeatDropStems/1"
@@ -190,6 +209,9 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
                 self._error(HTTPStatus.BAD_REQUEST, "upload ended early")
                 return
 
+            if params.pop("save") and library_dir:
+                saved = save_to_library(upload, library_dir, params["title"], params["artist"], params["fallback_title"])
+                print(f"saved to library: {saved.relative_to(library_dir.parent)}")
             job, queued = separator.submit(f"t-{digest.hexdigest()[:12]}", upload, params)
             if not queued:
                 shutil.rmtree(upload_dir, ignore_errors=True)
@@ -206,6 +228,7 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
             suffix = Path(filename).suffix.lower()
             # Missing title/artist are read from the file's tags during separation.
             params: dict = {"title": first("title") or None, "artist": first("artist") or None,
+                            "save": first("save") in ("1", "true"),
                             "fallback_title": Path(filename).stem or "Untitled",
                             "upload_name": ps.slugify(Path(filename).stem)[:60]
                             + (suffix if suffix in AUDIO_SUFFIXES else "")}
@@ -289,9 +312,11 @@ def main() -> None:
     parser.add_argument("--model", default=ps.DEFAULT_MODEL)
     parser.add_argument("--device", default="cpu", help="Demucs device (cpu, or cuda on NVIDIA)")
     parser.add_argument("--demucs-python", default=ps.default_demucs_python())
-    parser.add_argument("--format", choices=("wav", "flac"), default="wav")
+    parser.add_argument("--format", choices=ps.FORMATS, default=ps.DEFAULT_FORMAT)
     parser.add_argument("--sample-rate", type=int, default=ps.DEFAULT_SAMPLE_RATE)
     parser.add_argument("--max-upload-mb", type=int, default=DEFAULT_MAX_UPLOAD_MB)
+    parser.add_argument("--library", type=Path, default=ps.LIBRARY_DIR,
+                        help="music library that save=1 uploads are copied into (default: mp3/)")
     parser.add_argument("--allow-origin", action="append", default=[],
                         help="extra CORS origin besides localhost (repeatable)")
     args = parser.parse_args()
@@ -306,7 +331,8 @@ def main() -> None:
     settings = {"model": args.model, "device": args.device, "demucs_python": args.demucs_python,
                 "fmt": args.format, "sample_rate": args.sample_rate}
     separator = Separator(out_root, settings)
-    handler = make_handler(separator, out_root, args.max_upload_mb * 1_000_000, set(args.allow_origin), demucs_ok)
+    handler = make_handler(separator, out_root, args.max_upload_mb * 1_000_000, set(args.allow_origin), demucs_ok,
+                           args.library.resolve())
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"BeatDrop stem separation on http://{args.host}:{args.port}  (stems in {out_root})")
     try:

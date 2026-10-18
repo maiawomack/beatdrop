@@ -11,3 +11,8 @@ __pycache__/
 
 # Generated stems (large, often copyrighted) -- regenerate with tools/stems/prepare_stems.py
 /public/stems/
+
+# Committed stems live in mp3/.stems/. The index and in-progress staging folders are
+# generated locally (the library builds the index from the manifests).
+/mp3/.stems/index.json
+/mp3/.stems/.*

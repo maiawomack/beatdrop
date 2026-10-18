@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-94a647c2d7f0",
+  "title": "Cool for the Summer",
+  "artist": "Demi Lovato",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9470019,
+  "durationSec": 214.7397,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 214.7397,
+  "bpm": 114.01,
+  "bpmSource": "manual",
+  "firstBeatSec": 0.2932,
+  "gainDb": 0.0,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.06,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.62,
+      "rmsDb": -20.96
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.62,
+      "rmsDb": -18.92
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -8.46,
+      "rmsDb": -22.0
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.62,
+      "rmsDb": -22.7
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
