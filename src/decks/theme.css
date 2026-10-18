@@ -1,0 +1,1197 @@
+/* Visuals from the design sketch: album-color gradient, stage lights, frosted glass
+   decks, black screens, filled stem faders, orange numbers, hand-drawn type. */
+
+/* Registered so the album colors fade instead of jumping when a track loads. */
+@property --left {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #3567b0;
+}
+
+@property --right {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #8c46a6;
+}
+
+:root {
+  --ink: #141418;
+  --teal: #4fd9d2;
+  --lilac: #c47be8;
+  --orange: #f27a2c;
+  --yellow: #ffe200;
+
+  --font: 'Shantell Sans Variable', 'Comic Neue', system-ui, sans-serif;
+  /* Blocky type for time, BPM, lyrics and every control. */
+  --font-block: 'Rubik Variable', system-ui, sans-serif;
+  /* INFM = how hand-drawn the letters look, BNCE = baseline bounce. */
+  --hand: 'INFM' 35, 'BNCE' 0;
+  --hand-loud: 'INFM' 100, 'BNCE' 45;
+
+  --record: min(70vh, 35vw);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #16161a;
+  color: var(--ink);
+  font-family: var(--font);
+  font-variation-settings: var(--hand);
+  font-weight: 450;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+  font-variation-settings: inherit;
+  color: inherit;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 19px;
+  padding: 1px 5px;
+  border-radius: 7px;
+  font: 500 12px var(--font-block);
+  text-align: center;
+  background: rgba(20, 20, 24, 0.09);
+  color: rgba(20, 20, 24, 0.62);
+}
+
+/* ------------------------------------------------------------------ backdrop + stage */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(60% 45% at 50% 0%, rgba(255, 244, 210, 0.1), transparent 70%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.45), transparent 40%, rgba(255, 255, 255, 0.06)),
+    linear-gradient(
+      90deg,
+      var(--left) 0%,
+      color-mix(in oklab, var(--left) 55%, #17171b) 24%,
+      #17171b 45%,
+      #17171b 55%,
+      color-mix(in oklab, var(--right) 55%, #17171b) 76%,
+      var(--right) 100%
+    );
+  transition: --left 1.4s ease, --right 1.4s ease;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sway {
+  animation: sway 11s ease-in-out infinite alternate;
+}
+
+@keyframes sway {
+  from { transform: rotate(-2.2deg); }
+  to { transform: rotate(2.2deg); }
+}
+
+.bloom {
+  animation: flicker 5s ease-in-out infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 0.95; }
+  50% { opacity: 0.75; }
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.app {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  /* The console sits between the two records without touching them. */
+  padding: 24px calc(var(--record) / 2 + 18px) 10px;
+  gap: 12px;
+}
+
+/* ------------------------------------------------------------------ top bar */
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  /* Keep the console below the hanging lamps. The stage SVG scales by
+     max(100vw/1920, 100vh/1080) and the lenses end ~100 units down. */
+  min-height: calc(max(5.21vw, 9.26vh) - 22px);
+}
+
+.wordmark {
+  margin: 0 0 0 -4px;
+  font-weight: 800;
+  font-variation-settings: var(--hand-loud);
+  font-size: clamp(40px, 3.8vw, 64px);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.note-d {
+  display: inline-block;
+  height: 0.8em;
+  width: auto;
+  margin: 0 0.01em 0 0.02em;
+  vertical-align: -0.02em;
+  color: var(--yellow);
+  overflow: visible;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.86);
+  font-family: var(--font-block);
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.led.on {
+  background: #6dffa8;
+  box-shadow: 0 0 8px #6dffa8;
+}
+
+.led.off {
+  background: #ff6b7d;
+  box-shadow: 0 0 8px #ff6b7d;
+}
+
+.clock {
+  margin: 0 6px 0 10px;
+  font-family: var(--font-block);
+  font-weight: 600;
+  font-size: clamp(26px, 2.2vw, 38px);
+  font-variant-numeric: tabular-nums;
+  color: var(--orange);
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ pills (buttons) */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 0 0 2px rgba(20, 20, 24, 0.85), 0 3px 0 rgba(20, 20, 24, 0.18);
+  font-family: var(--font-block);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+}
+
+.pill:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.pill:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 0 0 2px rgba(20, 20, 24, 0.85), 0 1px 0 rgba(20, 20, 24, 0.18);
+}
+
+.pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pill svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  flex: none;
+}
+
+.pill.on {
+  background: var(--deck);
+  box-shadow: inset 0 0 0 2px rgba(20, 20, 24, 0.85), 0 0 22px color-mix(in srgb, var(--deck) 70%, transparent);
+}
+
+.pill.fs {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pill.fs:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.pill.fs svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ------------------------------------------------------------------ deck (frosted glass) */
+
+/* The console: one frosted rectangular body holding both decks, the tempo faders
+   and the mixer, like a DJ controller. */
+.console {
+  position: relative;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 76px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 20px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.22) 60%, rgba(255, 255, 255, 0.3));
+  backdrop-filter: blur(16px) saturate(135%);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.3);
+}
+
+/* A white marker outline, slightly wobbly, drawn around the unit. */
+.console::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  filter: url(#wobble);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.deck {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.4);
+  transition: box-shadow 0.4s;
+}
+
+.deck.dropping {
+  outline: 3px dashed var(--deck);
+  outline-offset: -3px;
+}
+
+.deck.live {
+  box-shadow: inset 0 0 0 2px var(--deck), 0 0 34px -8px var(--deck);
+}
+
+/* ------------------------------------------------------------------ search */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.search::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2.5px solid var(--ink);
+  filter: url(#wobble);
+  pointer-events: none;
+}
+
+.search.open {
+  background: #ffffff;
+}
+
+.search.failed::before {
+  border-color: #c8323f;
+}
+
+.search-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--deck) 60%, transparent);
+  transition: width 0.4s;
+}
+
+.search-icon {
+  position: relative;
+  width: 21px;
+  height: 21px;
+  flex: none;
+}
+
+.search input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-weight: 550;
+  font-size: 16px;
+  text-overflow: ellipsis;
+}
+
+.search input::placeholder {
+  color: rgba(20, 20, 24, 0.5);
+}
+
+.search > kbd {
+  position: relative;
+}
+
+.results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 48vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 22px;
+  box-shadow: inset 0 0 0 2.5px var(--ink), 0 24px 50px rgba(0, 0, 0, 0.35);
+}
+
+.results li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas:
+    'title num dur'
+    'artist num dur';
+  align-items: center;
+  column-gap: 14px;
+  padding: 8px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.results li.hl {
+  background: color-mix(in srgb, var(--deck) 22%, white);
+}
+
+.r-title {
+  grid-area: title;
+  font-weight: 650;
+  font-size: 16.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r-artist {
+  grid-area: artist;
+  font-size: 13.5px;
+  color: #6b6b75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r-num {
+  grid-area: num;
+  font-family: var(--font-block);
+  font-weight: 600;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  color: var(--orange);
+}
+
+.r-num.dim {
+  grid-area: dur;
+  font-weight: 500;
+  color: #8a8a94;
+}
+
+.results li.upload {
+  grid-template-columns: 1fr;
+  grid-template-areas: 'title' 'artist';
+  font-weight: 650;
+  margin-top: 4px;
+  border-top: 2px dashed #e2e1e8;
+  border-radius: 0 0 16px 16px;
+}
+
+.results li.empty {
+  display: block;
+  color: #6b6b75;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ deck row */
+
+.deck-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.deck-letter {
+  font-weight: 800;
+  font-variation-settings: var(--hand-loud);
+  font-size: clamp(38px, 3.4vw, 58px);
+  line-height: 0.8;
+  color: var(--deck);
+  margin-right: 4px;
+  text-shadow: 0 2px 0 rgba(20, 20, 24, 0.18);
+}
+
+.bpm {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-block);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(24px, 2.2vw, 38px);
+  line-height: 0.9;
+  color: var(--orange);
+  text-shadow: 0 2px 0 rgba(20, 20, 24, 0.12);
+  white-space: nowrap;
+}
+
+.bpm small {
+  font-size: 0.45em;
+  font-weight: 600;
+}
+
+/* Elapsed time, big and blocky, with the remaining time beside it. */
+.time {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-block);
+  font-weight: 600;
+  font-size: clamp(22px, 1.9vw, 32px);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.time .remaining {
+  font-size: 0.6em;
+  font-weight: 500;
+  opacity: 0.55;
+}
+
+.transport {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.transport .pill {
+  justify-content: center;
+  padding: 0 10px;
+}
+
+/* ------------------------------------------------------------------ screen (waveform) */
+
+.screen {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 10px 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1a1a20, #0f0f12);
+  box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.screen-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  font-family: var(--font-block);
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.screen-status .err {
+  color: #ff8a95;
+}
+
+.wave {
+  position: relative;
+  min-height: 70px;
+}
+
+.overview {
+  position: relative;
+  height: 20px;
+  cursor: pointer;
+}
+
+.wave canvas,
+.overview canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ------------------------------------------------------------------ stem faders */
+
+.stems {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stem {
+  display: grid;
+  gap: 8px;
+}
+
+.fader {
+  position: relative;
+  height: clamp(80px, 17vh, 200px);
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--c) 22%, rgba(255, 255, 255, 0.45));
+  box-shadow: inset 0 0 0 2.5px var(--c), inset 0 3px 10px rgba(20, 20, 24, 0.12);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.fader .fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--c) 55%, #141418), color-mix(in srgb, var(--c) 72%, #141418));
+  transition: height 0.06s linear;
+}
+
+/* The fill's top edge is the handle. */
+.fader .fill::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 5px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.fader .meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: linear-gradient(to top, var(--c), color-mix(in srgb, var(--c) 55%, white));
+  box-shadow: 0 0 24px var(--c), inset 0 2px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Faint rungs: the ladder from the sketch. */
+.fader .rungs {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to top, transparent 0 calc(11.11% - 2px), rgba(255, 255, 255, 0.28) calc(11.11% - 2px) 11.11%);
+  pointer-events: none;
+}
+
+.fader .pct {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-block);
+  font-weight: 600;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.stem.muted .fader .pct {
+  color: rgba(20, 20, 24, 0.6);
+  text-shadow: none;
+}
+
+.stem.muted .fader {
+  background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.4) 0 7px, rgba(255, 255, 255, 0.22) 7px 14px);
+  box-shadow: inset 0 0 0 2.5px rgba(20, 20, 24, 0.35);
+}
+
+.stem.muted .fill {
+  background: rgba(20, 20, 24, 0.18);
+}
+
+.stem.muted .meter {
+  display: none;
+}
+
+.mute {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  height: 29px;
+  padding: 0 7px 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 80%, #141418);
+  font-family: var(--font-block);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mute:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.stem.muted .mute {
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.stem.muted .mute kbd {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ------------------------------------------------------------------ mixer bar */
+
+.mixer {
+  position: relative;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 1.3fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 8px 24px 7px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 28, 34, 0.88), rgba(12, 12, 15, 0.92));
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.lyric {
+  min-width: 0;
+}
+
+.lyric.right {
+  text-align: right;
+}
+
+.lyric .now {
+  font-family: var(--font-block);
+  font-weight: 500;
+  font-size: clamp(13px, 1vw, 17px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1.3em;
+}
+
+.lyric .next {
+  margin-top: 3px;
+  font-family: var(--font-block);
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1.2em;
+}
+
+.xfader {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 18px;
+}
+
+.xfader .side {
+  font-weight: 800;
+  font-variation-settings: var(--hand-loud);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--deck);
+  opacity: calc(0.3 + var(--amount) * 0.7);
+  text-shadow: 0 0 calc(var(--amount) * 18px) var(--deck);
+}
+
+.xfader .track {
+  position: relative;
+  height: 50px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* Scale printed on the faceplate above and below the slot. */
+.xfader .ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 1.5px, transparent 1.5px 10%) 0 0 / 100% 7px no-repeat,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 1.5px, transparent 1.5px 10%) 0 100% / 100% 7px no-repeat,
+    linear-gradient(var(--orange), var(--orange)) 50% 0 / 2px 12px no-repeat,
+    linear-gradient(var(--orange), var(--orange)) 50% 100% / 2px 12px no-repeat;
+}
+
+.xfader .slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 12px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #030304, #1c1c22);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.95), 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Fader cap: grey plastic with grip ridges and an orange center line. */
+.xfader .cap {
+  position: absolute;
+  top: 50%;
+  width: 34px;
+  height: 46px;
+  border-radius: 9px;
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(var(--orange), var(--orange)) 50% 50% / 3px 70% no-repeat,
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 5px) 50% 50% / 100% 78% no-repeat,
+    linear-gradient(90deg, #77777f, #e9e9ee 38%, #c4c4cc 62%, #6d6d75);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+  transition: left 0.08s linear;
+}
+
+.xfader-help {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-family: var(--font-block);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.xfader-help kbd {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-family: var(--font-block);
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* The footer sits below the records, so it can use the full width. */
+.app > .legend {
+  margin-inline: calc(var(--record) / -2);
+}
+
+.legend kbd {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ------------------------------------------------------------------ vinyl */
+
+.vinyl {
+  position: fixed;
+  top: 53%;
+  width: var(--record);
+  height: var(--record);
+  pointer-events: none;
+}
+
+.vinyl.left {
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+.vinyl.right {
+  right: 0;
+  transform: translate(50%, -50%);
+}
+
+/* Beat pulse: JS sets the scale and --beat (0..1) every frame. */
+.vinyl .pulse {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.vinyl .beat-glow {
+  position: absolute;
+  inset: -7%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 62%,
+    color-mix(in srgb, var(--deck) 75%, transparent) 69%,
+    color-mix(in srgb, var(--deck) 30%, transparent) 74%,
+    transparent 80%
+  );
+  opacity: var(--beat, 0);
+  filter: blur(6px);
+}
+
+.vinyl .spin {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 34px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: spin 1.8s linear infinite; /* 33 1/3 rpm */
+  animation-play-state: paused;
+}
+
+.vinyl.playing .spin {
+  animation-play-state: running;
+}
+
+.vinyl .surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.vinyl .label {
+  position: absolute;
+  inset: 33.25%;
+  width: 33.5%;
+  height: 33.5%;
+  overflow: visible;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+.label-text {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 5.6px;
+  letter-spacing: 0.1em;
+  fill: #1b1b20;
+}
+
+.label-text.small {
+  font-weight: 500;
+  font-size: 4.4px;
+  letter-spacing: 0.04em;
+}
+
+/* Stage light caught in the grooves; stays put while the record turns. */
+.vinyl .sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      from 8deg,
+      transparent 0deg,
+      rgba(255, 255, 255, 0.05) 14deg,
+      rgba(255, 255, 255, 0.2) 30deg,
+      rgba(255, 255, 255, 0.06) 46deg,
+      transparent 64deg 186deg,
+      rgba(255, 255, 255, 0.04) 196deg,
+      rgba(255, 255, 255, 0.15) 211deg,
+      rgba(255, 255, 255, 0.04) 226deg,
+      transparent 244deg
+    ),
+    radial-gradient(circle at 50% 50%, transparent 60%, rgba(255, 255, 255, 0.05) 85%, transparent 96%);
+  -webkit-mask: radial-gradient(circle, transparent 0 33.6%, #000 34%, #000 99%, transparent 99.6%);
+  mask: radial-gradient(circle, transparent 0 33.6%, #000 34%, #000 99%, transparent 99.6%);
+  mix-blend-mode: screen;
+  filter: blur(1.5px);
+}
+
+.vinyl .ring {
+  position: absolute;
+  inset: -2.5%;
+  width: 105%;
+  height: 105%;
+  overflow: visible;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sway,
+  .bloom,
+  .vinyl .spin {
+    animation: none;
+  }
+  .backdrop {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ record */
+
+.pill.rec {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pill.rec:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.pill.rec kbd,
+.pill.fs kbd {
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff3b4e;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.pill.rec.on {
+  background: #e3283c;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 26px rgba(255, 59, 78, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+.pill.rec.on .rec-dot {
+  background: #ffffff;
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  50% { opacity: 0.25; }
+}
+
+/* ------------------------------------------------------------------ tempo faders */
+
+/* Beside each deck, where a turntable's pitch fader sits. */
+.tempo {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 6px 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 28, 34, 0.88), rgba(12, 12, 15, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-family: var(--font-block);
+}
+
+.tempo-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tempo-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 60px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  font-family: var(--font-block);
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tempo-step:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.tempo-step kbd {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tempo-track {
+  position: relative;
+  width: 100%;
+  min-height: 120px;
+  cursor: ns-resize;
+  touch-action: none;
+  /* Scale printed beside the slot, with an orange mark at normal speed. */
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0 1.5px, transparent 1.5px 12.5%) 22% 0 / 10px 100% no-repeat,
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0 1.5px, transparent 1.5px 12.5%) 78% 0 / 10px 100% no-repeat,
+    linear-gradient(var(--orange), var(--orange)) 50% 50% / 46px 2px no-repeat;
+}
+
+.tempo-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 10px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #030304, #1c1c22);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.95), 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.tempo-mark {
+  position: absolute;
+  right: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-50%);
+}
+
+.tempo.left .tempo-mark {
+  right: auto;
+  left: 0;
+}
+
+.tempo-mark.top { top: 0; transform: none; }
+.tempo-mark.mid { top: 50%; }
+.tempo-mark.bottom { bottom: 0; top: auto; transform: none; }
+
+/* Same grey cap as the crossfader, turned sideways. */
+.tempo-cap {
+  position: absolute;
+  left: 50%;
+  width: 50px;
+  height: 28px;
+  border-radius: 8px;
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(var(--deck), var(--deck)) 50% 50% / 72% 3px no-repeat,
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 5px) 50% 50% / 80% 100% no-repeat,
+    linear-gradient(180deg, #e9e9ee, #c4c4cc 55%, #77777f);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: top 0.08s linear;
+}
+
+.tempo-readout {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  border: 0;
+  background: none;
+  padding: 2px 0 0;
+  color: #ffffff;
+  font-family: var(--font-block);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.tempo.shifted .tempo-readout .pct {
+  color: var(--deck);
+}
+
+.tempo-readout b {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--orange);
+}
+
+.tempo-readout small {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+}
+

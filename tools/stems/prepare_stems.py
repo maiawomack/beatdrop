@@ -20,6 +20,7 @@ Subcommands:
     demo      synthesize two copyright-free demo tracks (no Demucs needed)
     verify    re-check prepared tracks on disk
     lyrics    (re)fetch lyrics for a prepared track, e.g. with a corrected title/artist
+    cover     add cover art to a prepared track from its original song file
     index     rebuild <out>/index.json from the track folders
 
 Output layout (default --out public/stems):
@@ -27,6 +28,7 @@ Output layout (default --out public/stems):
     <track-id>/manifest.json
     <track-id>/waveform.json
     <track-id>/lyrics.json      (when found; manifest "lyrics" is null otherwise)
+    <track-id>/cover.jpg|png    (embedded art, when the file has it; manifest "cover")
     <track-id>/{vocals,drums,bass,instrumental}.wav
 """
 
@@ -278,8 +280,8 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
                   artist: str, sample_rate: int, fmt: str, source: str, mix: np.ndarray | None = None,
                   bpm: float | None = None, first_beat: float | None = None,
                   target_rms_db: float = DEFAULT_TARGET_RMS_DB, ceiling_db: float = DEFAULT_CEILING_DB,
-                  lyrics: dict | None = None, clip_start: float = 0.0,
-                  source_duration: float | None = None) -> dict:
+                  lyrics: dict | None = None, cover: tuple[bytes, str] | None = None,
+                  clip_start: float = 0.0, source_duration: float | None = None) -> dict:
     """Make stems sample-aligned, level them, analyze tempo, and write the track folder."""
     missing = [s for s in STEM_IDS if s not in stems]
     if missing:
@@ -341,6 +343,8 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
     (staging / "waveform.json").write_text(json.dumps(waveform, separators=(",", ":")))
     if lyrics:
         (staging / "lyrics.json").write_text(json.dumps(lyrics, indent=1) + "\n")
+    if cover:
+        (staging / f"cover.{cover[1]}").write_bytes(cover[0])
 
     manifest = {
         "version": MANIFEST_VERSION,
@@ -364,6 +368,7 @@ def prepare_track(stems: dict[str, np.ndarray], *, out_root: Path, track_id: str
         "stems": stem_entries,
         "waveform": "waveform.json",
         "lyrics": "lyrics.json" if lyrics else None,
+        "cover": f"cover.{cover[1]}" if cover else None,
     }
     (staging / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if track_dir.exists():
@@ -505,7 +510,8 @@ def separate_file(song: Path, *, out_root: Path, track_id: str, title: str | Non
     manifest = prepare_track(stems, out_root=out_root, track_id=track_id, title=title, artist=artist,
                              sample_rate=sample_rate, fmt=fmt, source=f"demucs:{model}", mix=mix, bpm=bpm,
                              first_beat=first_beat, target_rms_db=target_rms_db, ceiling_db=ceiling_db,
-                             lyrics=lyrics, clip_start=start or 0.0, source_duration=source_duration)
+                             lyrics=lyrics, cover=lyrics_lookup.read_cover(song), clip_start=start or 0.0,
+                             source_duration=source_duration)
     report("done", 1.0)
     return manifest
 
@@ -629,6 +635,23 @@ def cmd_lyrics(args: argparse.Namespace) -> None:
     print(f"[{args.track}] lyrics: {lyrics['matchedArtist']} - {lyrics['matchedTitle']} ({kind})")
 
 
+def cmd_cover(args: argparse.Namespace) -> None:
+    track_dir = args.out / args.track
+    manifest_path = track_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise StemError(f"no prepared track {args.track!r} in {args.out}")
+    cover = lyrics_lookup.read_cover(Path(args.song))
+    if not cover:
+        raise StemError(f"{args.song} has no embedded cover art")
+    m = json.loads(manifest_path.read_text())
+    (track_dir / f"cover.{cover[1]}").write_bytes(cover[0])
+    m["cover"] = f"cover.{cover[1]}"
+    tmp = track_dir / ".manifest.json.tmp"
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, manifest_path)
+    print(f"[{args.track}] cover: {m['cover']} ({len(cover[0]) // 1024} KB)")
+
+
 def cmd_index(args: argparse.Namespace) -> None:
     write_index(args.out)
     print(f"wrote {args.out / 'index.json'}")
@@ -675,6 +698,11 @@ def main() -> None:
     p.add_argument("--title", help="search with this title instead of the manifest's")
     p.add_argument("--artist", help="search with this artist instead of the manifest's")
     p.set_defaults(func=cmd_lyrics)
+
+    p = sub.add_parser("cover", help="add cover art to a prepared track from its song file")
+    p.add_argument("track", help="track id (folder name)")
+    p.add_argument("song", help="the original audio file with embedded art")
+    p.set_defaults(func=cmd_cover)
 
     p = sub.add_parser("index", help="rebuild index.json")
     p.set_defaults(func=cmd_index)
