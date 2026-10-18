@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { STEM_IDS, type AudioController, type DeckId, type StemId } from '../shared/contracts';
-import { fetchTrackIndex, type ResolvedTrackIndexEntry } from '../stems';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { STEM_IDS, type DeckId, type StemId } from '../shared/types';
 import { DeckPanel, stopDeck, type DeckKeys } from './components/DeckPanel';
 import type { DeckSearchHandle } from './components/DeckSearch';
 import { MixerStrip } from './components/MixerStrip';
 import { Stage } from './components/Stage';
 import { TempoFader } from './components/TempoFader';
 import { Vinyl } from './components/Vinyl';
-import { formatTime, useAppState, useSeparationServer, useTrackExtras } from './hooks';
+import { useEngineState, type EngineStore } from './engineStore';
+import { formatTime, useSeparationServer, useTrackExtras } from './hooks';
 import { DEFAULT_SIDE_COLORS } from './theme';
 import { useKeyGlide } from './useKeyGlide';
 import { useRecorder, type Recorder } from './useRecorder';
@@ -28,57 +28,36 @@ function toggleFullscreen() {
   else void document.documentElement.requestFullscreen().catch(() => {});
 }
 
-export function App({ controller }: { controller: AudioController }) {
-  const state = useAppState(controller);
+export function App({ engine }: { engine: EngineStore }) {
+  const state = useEngineState(engine);
   const extrasA = useTrackExtras(state.decks.A.track);
   const extrasB = useTrackExtras(state.decks.B.track);
   const serverReady = useSeparationServer();
-  const recorder = useRecorder(controller);
-  useKeyGlide(controller, TEMPO_KEYS);
-  const [tracks, setTracks] = useState<ResolvedTrackIndexEntry[]>([]);
+  const recorder = useRecorder(engine);
+  useKeyGlide(engine, TEMPO_KEYS);
   const search = useRef<Record<DeckId, DeckSearchHandle | null>>({ A: null, B: null });
-
-  const refreshTracks = useCallback(async () => {
-    try {
-      const list = await fetchTrackIndex(`/stems/index.json?ts=${Date.now()}`);
-      setTracks(list);
-      return list;
-    } catch {
-      setTracks([]); // no index yet
-      return [];
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshTracks();
-  }, [refreshTracks]);
-
-  const onSeparated = useCallback(
-    async (trackId: string) => (await refreshTracks()).find((t) => t.id === trackId),
-    [refreshTracks],
-  );
 
   // Keyboard: the primary way to drive Monitor 1 during a performance.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === 'INPUT') return;
       const key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      const s = controller.getState();
+      const s = engine.getState();
       // Crossfader and tempo keys glide while held (useKeyGlide); everything else fires once.
       if (e.repeat) return;
 
       for (const deck of ['A', 'B'] as const) {
         const k = KEYS[deck];
         if (key === k.play) {
-          controller.dispatch({ type: s.decks[deck].playing ? 'deck/pause' : 'deck/play', deck });
+          engine.dispatch({ type: s.decks[deck].playing ? 'PAUSE' : 'PLAY', deck });
         } else if (key === k.stop) {
-          stopDeck(controller, deck);
+          stopDeck(engine, deck);
         } else if (key === k.cue) {
-          controller.dispatch({ type: 'deck/seek', deck, timeSec: 0 });
+          engine.dispatch({ type: 'SEEK', deck, positionSec: 0 });
         } else {
           const stem = STEM_IDS.find((st: StemId) => k.mute[st] === key);
           if (!stem) continue;
-          controller.dispatch({ type: 'stem/setMuted', deck, stem, muted: !s.decks[deck].stems[stem].muted });
+          engine.dispatch({ type: 'SET_STEM_MUTE', deck, stem, muted: !s.decks[deck].stems[stem].muted });
         }
         e.preventDefault();
         return;
@@ -92,7 +71,7 @@ export function App({ controller }: { controller: AudioController }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [controller, recorder]);
+  }, [engine, recorder]);
 
   // Each side of the backdrop takes the color of that deck's album cover.
   const backdrop = {
@@ -103,38 +82,36 @@ export function App({ controller }: { controller: AudioController }) {
   return (
     <div className="backdrop" style={backdrop}>
       <Stage />
-      <Vinyl deck={state.decks.A} controller={controller} crossfader={state.mixer.crossfader} />
-      <Vinyl deck={state.decks.B} controller={controller} crossfader={state.mixer.crossfader} />
+      <Vinyl deck={state.decks.A} engine={engine} firstBeatSec={extrasA.firstBeatSec} crossfader={state.mixer.crossfader} />
+      <Vinyl deck={state.decks.B} engine={engine} firstBeatSec={extrasB.firstBeatSec} crossfader={state.mixer.crossfader} />
 
       <main className="app">
         <TopBar recorder={recorder} />
         {/* One rectangular unit, like a DJ controller: tempo | deck A | deck B | tempo, mixer below. */}
         <section className="console">
-          <TempoFader deck={state.decks.A} controller={controller} keys={TEMPO_KEYS.A} />
+          <TempoFader deck={state.decks.A} engine={engine} keys={TEMPO_KEYS.A} />
           {(['A', 'B'] as const).map((id) => (
             <DeckPanel
               key={id}
               ref={(h) => (search.current[id] = h)}
               deck={state.decks[id]}
-              controller={controller}
+              engine={engine}
               extras={id === 'A' ? extrasA : extrasB}
               keys={KEYS[id]}
-              tracks={tracks}
               serverReady={serverReady}
-              onSeparated={onSeparated}
             />
           ))}
-          <TempoFader deck={state.decks.B} controller={controller} keys={TEMPO_KEYS.B} />
-          <MixerStrip state={state} controller={controller} lyrics={{ A: extrasA.lyrics, B: extrasB.lyrics }} />
+          <TempoFader deck={state.decks.B} engine={engine} keys={TEMPO_KEYS.B} />
+          <MixerStrip state={state} engine={engine} lyrics={{ A: extrasA.lyrics, B: extrasB.lyrics }} />
         </section>
         <footer className="legend">
           <span className="status" title="Splits new songs into stems">
             <i className={`led ${serverReady ? 'on' : serverReady === false ? 'off' : ''}`} />
             {serverReady === false ? 'separator offline' : 'separator ready'}
           </span>
-          <span className="status" title="Placeholder until the Task 1 audio engine lands">
-            <i className="led on" />
-            stand-in audio
+          <span className="status" title="Task 1 audio engine (Web Audio)">
+            <i className={`led ${state.decks.A.status === 'error' || state.decks.B.status === 'error' ? 'off' : 'on'}`} />
+            audio engine
           </span>
           <span><kbd>[</kbd> <kbd>]</kbd> find a song</span>
           <span><kbd>Q</kbd> <kbd>P</kbd> play</span>

@@ -4,7 +4,8 @@
 
 1. Install Node.js 20+ and run `npm install`.
 2. Put audio files in `mp3/` (see below).
-3. Run `npm run dev` and open http://127.0.0.1:5173/.
+3. Run `npm run dev` and open http://127.0.0.1:5173/ (the decks interface).
+   The engine test harness is at http://127.0.0.1:5173/harness.html.
 
 No API keys or accounts are needed. Music is served from your own files by routes on the
 Vite server ([`server/audioLibrary.ts`](../server/audioLibrary.ts)), so use `npm run dev` or
@@ -60,6 +61,16 @@ engine.getPositionSec('A');                 // live playhead for animation frame
 ```
 
 All commands and state shapes are defined in [`src/shared/types.ts`](../src/shared/types.ts).
+
+Two read-only helpers were added for the decks UI (Task 3). They don't change playback:
+
+```ts
+engine.getLevels('A');      // { vocals, drums, bass, instrumental } live level 0..1, for meters
+engine.getOutputStream();   // master mix as a MediaStream, for recording a set
+```
+
+`getLevels` comes from a pass-through `AnalyserNode` after each stem's gain in `DeckChannel`.
+A full-mix track reports its one level on every stem.
 Both decks decode into Web Audio and share one master bus, so they play and layer at the
 same time, and every control works on both.
 

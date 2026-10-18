@@ -7,10 +7,11 @@ import '@fontsource-variable/rubik';
 import './theme.css';
 
 import { createRoot } from 'react-dom/client';
-import { createStandInEngine } from '../engine/standInEngine';
+import { AudioEngine } from '../audio/AudioEngine';
+import { EngineStore } from './engineStore';
 import { App } from './App';
 
-// This window owns the audio. Swap in the Task 1 engine here when it's ready.
-const controller = createStandInEngine();
+// This window owns the audio engine (Task 1). Exactly one window may construct it.
+const engine = new EngineStore(new AudioEngine());
 
-createRoot(document.getElementById('root')!).render(<App controller={controller} />);
+createRoot(document.getElementById('root')!).render(<App engine={engine} />);

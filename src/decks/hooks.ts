@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { ApplicationState, AudioController, LoadedTrackInfo } from '../shared/contracts';
+import { useEffect, useRef, useState } from 'react';
+import type { TrackInfo } from '../shared/types';
 import {
   fetchLyrics,
   fetchWaveform,
@@ -8,10 +8,6 @@ import {
   type TrackManifest,
   type TrackWaveform,
 } from '../stems';
-
-export function useAppState(controller: AudioController): ApplicationState {
-  return useSyncExternalStore(controller.subscribe, controller.getState);
-}
 
 /** Runs `frame` on every animation frame (for playheads and meters; avoids React renders). */
 export function useAnimationFrame(frame: (now: number) => void): void {
@@ -28,16 +24,19 @@ export function useAnimationFrame(frame: (now: number) => void): void {
   }, []);
 }
 
+/** Extras that exist once a track has been split into stems (Task 5 manifest). */
 export interface TrackExtras {
   waveform: TrackWaveform | null;
   lyrics: TrackLyrics | null;
+  /** Beat-grid phase; beats fall at firstBeatSec + k * 60 / bpm. */
+  firstBeatSec: number;
   /** Absolute URL of the cover art, if the song had any. */
   cover: string | null;
   /** The cover's most vivid color, for the background on this deck's side. */
   coverColor: string | null;
 }
 
-const NO_EXTRAS: TrackExtras = { waveform: null, lyrics: null, cover: null, coverColor: null };
+const NO_EXTRAS: TrackExtras = { waveform: null, lyrics: null, firstBeatSec: 0, cover: null, coverColor: null };
 
 /**
  * A cover's representative color: average of its pixels weighted toward saturated
@@ -67,14 +66,25 @@ async function vividColor(url: string): Promise<string | null> {
   return `rgb(${to255(r)} ${to255(gr)} ${to255(b)})`;
 }
 
-/** Waveform peaks, lyrics and cover art for the loaded track (fetched once per track). */
-export function useTrackExtras(track: LoadedTrackInfo | null): TrackExtras {
+/**
+ * Waveform, lyrics, beat grid and cover art for a deck's track, from its stems manifest.
+ * Full-mix tracks (not split yet) have none of these; their library artwork still counts.
+ */
+export function useTrackExtras(track: TrackInfo | null): TrackExtras {
   const [extras, setExtras] = useState<TrackExtras>(NO_EXTRAS);
-  const url = track?.manifestUrl;
+  const url = track?.stemsManifestUrl ? new URL(track.stemsManifestUrl, location.href).href : null;
+  const artwork = track?.artworkUrl ?? null;
   useEffect(() => {
     setExtras(NO_EXTRAS);
-    if (!url) return;
     const abort = new AbortController();
+    if (!url) {
+      if (artwork) {
+        vividColor(artwork)
+          .then((coverColor) => !abort.signal.aborted && setExtras({ ...NO_EXTRAS, cover: artwork, coverColor }))
+          .catch(() => {});
+      }
+      return () => abort.abort();
+    }
     (async () => {
       const manifest = (await (await fetch(url, { signal: abort.signal })).json()) as TrackManifest;
       const ref = { manifest, manifestUrl: url };
@@ -82,14 +92,16 @@ export function useTrackExtras(track: LoadedTrackInfo | null): TrackExtras {
         fetchWaveform(ref, abort.signal),
         fetchLyrics(ref, abort.signal).catch(() => null),
       ]);
-      const cover = manifest.cover ? new URL(manifest.cover, url).href : null;
+      const cover = manifest.cover ? new URL(manifest.cover, url).href : artwork;
       const coverColor = cover ? await vividColor(cover).catch(() => null) : null;
-      if (!abort.signal.aborted) setExtras({ waveform, lyrics, cover, coverColor });
+      if (!abort.signal.aborted) {
+        setExtras({ waveform, lyrics, firstBeatSec: manifest.firstBeatSec, cover, coverColor });
+      }
     })().catch(() => {
       // Extras are decoration; the deck still plays without them.
     });
     return () => abort.abort();
-  }, [url]);
+  }, [url, artwork]);
   return extras;
 }
 
@@ -107,6 +119,11 @@ export function useSeparationServer(intervalMs = 10_000): boolean | null {
     };
   }, [intervalMs]);
   return ready;
+}
+
+/** "Title — Artist A, Artist B" (or just the title). */
+export function trackLabel(track: TrackInfo): string {
+  return track.artists.length ? `${track.title} — ${track.artists.join(', ')}` : track.title;
 }
 
 export function formatTime(sec: number): string {

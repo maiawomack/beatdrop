@@ -10,8 +10,8 @@ const ECHO_FEEDBACK = 0.45;
 /**
  * One deck's Web Audio graph and sample-accurate buffer playback.
  *
- *   stem sources ─► stemGain ─┐
- *   full source ──► fullGain ─┴► input ─► low ─► mid ─► high ─► filter ─┬──────────► fader ─► xf ─► destination
+ *   stem sources ─► stemGain ─► meter ─┐
+ *   full source ──► fullGain ─► meter ─┴► input ─► low ─► mid ─► high ─► filter ─┬──────────► fader ─► xf ─► destination
  *                                                                     └► echoSend ─► delay ⇄ feedback
  *                                                                                      └────► fader
  */
@@ -25,6 +25,9 @@ export class DeckChannel {
   private readonly filter: BiquadFilterNode;
   private readonly echoSend: GainNode;
   private readonly gains: Record<BufferKey, GainNode>;
+  /** Pass-through analysers after each gain, so UIs can show live levels. */
+  private readonly meters: Record<BufferKey, AnalyserNode>;
+  private readonly meterScratch = new Float32Array(512);
 
   private buffers: Partial<Record<BufferKey, AudioBuffer>> = {};
   private sources: AudioBufferSourceNode[] = [];
@@ -79,11 +82,15 @@ export class DeckChannel {
     this.fader.connect(this.xf).connect(destination);
 
     const gains = {} as Record<BufferKey, GainNode>;
+    const meters = {} as Record<BufferKey, AnalyserNode>;
     for (const key of [...STEM_IDS, 'full'] as BufferKey[]) {
       gains[key] = ctx.createGain();
-      gains[key].connect(this.input);
+      meters[key] = ctx.createAnalyser();
+      meters[key].fftSize = this.meterScratch.length;
+      gains[key].connect(meters[key]).connect(this.input);
     }
     this.gains = gains;
+    this.meters = meters;
   }
 
   get playing(): boolean {
@@ -179,6 +186,26 @@ export class DeckChannel {
     if (loop && pos >= loop.endSec) pos = loop.startSec;
     this.stopSources();
     this.startSources(pos);
+  }
+
+  /**
+   * Live level per stem after its gain/mute, 0..1 (RMS, scaled so a loud stem nears 1).
+   * A full-mix track reports its level on every stem. Cheap enough for animation frames.
+   */
+  levels(): Record<StemId, number> {
+    const out = {} as Record<StemId, number>;
+    const full = this.hasStems ? 0 : this.level('full');
+    for (const stem of STEM_IDS) out[stem] = this.hasStems ? this.level(stem) : full;
+    return out;
+  }
+
+  private level(key: BufferKey): number {
+    if (!this._playing) return 0;
+    const data = this.meterScratch;
+    this.meters[key].getFloatTimeDomainData(data);
+    let sum = 0;
+    for (const v of data) sum += v * v;
+    return clamp(Math.sqrt(sum / data.length) * 3.2, 0, 1);
   }
 
   setFader(gain: number): void {
