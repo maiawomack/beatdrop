@@ -1,4 +1,4 @@
-"""Song metadata from file tags, and lyrics from LRCLIB (https://lrclib.net, free, no key).
+"""Song metadata and cover art from file tags, and lyrics from LRCLIB (https://lrclib.net, free, no key).
 
 Synced (timestamped) lyrics are only trusted when the LRCLIB recording's length is within
 SYNC_TOLERANCE_SEC of ours: a radio edit vs. album version would put every line off.
@@ -40,6 +40,40 @@ def clean_title(text: str) -> str:
     text = re.sub(r"[\(\[].*?[\)\]]", " ", text)
     text = re.sub(r"\s-\s.*(remaster|version|edit|mix|live).*$", " ", text, flags=re.IGNORECASE)
     return " ".join(text.split())
+
+
+def read_cover(path: Path) -> tuple[bytes, str] | None:
+    """Embedded cover art as (image bytes, "jpg" | "png"), or None. Front cover preferred."""
+    try:
+        import mutagen
+
+        audio = mutagen.File(str(path))
+    except Exception:
+        return None
+    if audio is None:
+        return None
+    pictures: list[tuple[bytes, str, int]] = []  # (data, mime, picture type; 3 = front cover)
+    tags = audio.tags
+    if hasattr(tags, "getall"):  # ID3 (MP3, AIFF)
+        pictures += [(p.data, p.mime, p.type) for p in tags.getall("APIC")]
+    if tags is not None and "covr" in tags:  # MP4 / M4A
+        pictures += [(bytes(c), "image/png" if c.imageformat == 14 else "image/jpeg", 3) for c in tags["covr"]]
+    pictures += [(p.data, p.mime, p.type) for p in getattr(audio, "pictures", [])]  # FLAC
+    if tags is not None and hasattr(tags, "get"):  # Ogg Vorbis / Opus
+        import base64
+
+        from mutagen.flac import Picture
+
+        for block in tags.get("metadata_block_picture", []) or []:
+            try:
+                p = Picture(base64.b64decode(block))
+                pictures.append((p.data, p.mime, p.type))
+            except Exception:
+                continue
+    if not pictures:
+        return None
+    data, mime, _ = max(pictures, key=lambda p: (p[2] == 3, len(p[0])))
+    return data, ("png" if "png" in mime or data[:4] == b"\x89PNG" else "jpg")
 
 
 def normalize(text: str) -> str:

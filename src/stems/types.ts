@@ -49,6 +49,8 @@ export interface TrackManifest {
   waveform: string;
   /** Path relative to the manifest, or null/absent when no lyrics were found. */
   lyrics?: string | null;
+  /** Embedded cover art (cover.jpg / cover.png) relative to the manifest, or null/absent. */
+  cover?: string | null;
 }
 
 /** <track-id>/lyrics.json (from LRCLIB). */
