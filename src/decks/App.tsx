@@ -10,12 +10,13 @@ import { useEngineState, type EngineStore } from './engineStore';
 import { formatTime, useSeparationServer, useTrackExtras } from './hooks';
 import { DEFAULT_SIDE_COLORS } from './theme';
 import { useKeyGlide } from './useKeyGlide';
+import { useDeckQueues } from './useQueue';
 import { useRecorder, type Recorder } from './useRecorder';
 
 // Left hand drives deck A, right hand deck B; no mouse needed during a set.
 const KEYS: Record<DeckId, DeckKeys> = {
-  A: { play: 'Q', stop: 'W', cue: 'A', mute: { vocals: '1', drums: '2', bass: '3', instrumental: '4' } },
-  B: { play: 'P', stop: 'O', cue: ';', mute: { vocals: '7', drums: '8', bass: '9', instrumental: '0' } },
+  A: { play: 'Q', stop: 'W', cue: 'A', skip: 'S', mute: { vocals: '1', drums: '2', bass: '3', instrumental: '4' } },
+  B: { play: 'P', stop: 'O', cue: ';', skip: 'L', mute: { vocals: '7', drums: '8', bass: '9', instrumental: '0' } },
 };
 const TEMPO_KEYS: Record<DeckId, { faster: string; slower: string }> = {
   A: { faster: 'E', slower: 'D' },
@@ -36,6 +37,7 @@ export function App({ engine }: { engine: EngineStore }) {
   const recorder = useRecorder(engine);
   useKeyGlide(engine, TEMPO_KEYS);
   const search = useRef<Record<DeckId, DeckSearchHandle | null>>({ A: null, B: null });
+  const queues = useDeckQueues(engine);
 
   // Keyboard: the primary way to drive Monitor 1 during a performance.
   useEffect(() => {
@@ -54,6 +56,8 @@ export function App({ engine }: { engine: EngineStore }) {
           stopDeck(engine, deck);
         } else if (key === k.cue) {
           engine.dispatch({ type: 'SEEK', deck, positionSec: 0 });
+        } else if (key === k.skip) {
+          queues.skip(deck);
         } else {
           const stem = STEM_IDS.find((st: StemId) => k.mute[st] === key);
           if (!stem) continue;
@@ -71,7 +75,7 @@ export function App({ engine }: { engine: EngineStore }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [engine, recorder]);
+  }, [engine, recorder, queues.skip]);
 
   // Each side of the backdrop takes the color of that deck's album cover.
   const backdrop = {
@@ -99,6 +103,10 @@ export function App({ engine }: { engine: EngineStore }) {
               extras={id === 'A' ? extrasA : extrasB}
               keys={KEYS[id]}
               serverReady={serverReady}
+              queue={queues.queues[id]}
+              onQueue={(t) => queues.add(id, t)}
+              onUnqueue={(i) => queues.remove(id, i)}
+              onSkip={() => queues.skip(id)}
             />
           ))}
           <TempoFader deck={state.decks.B} engine={engine} keys={TEMPO_KEYS.B} />
@@ -118,6 +126,7 @@ export function App({ engine }: { engine: EngineStore }) {
           <span><kbd>W</kbd> <kbd>O</kbd> stop</span>
           <span><kbd>E</kbd><kbd>D</kbd> <kbd>I</kbd><kbd>K</kbd> tempo</span>
           <span><kbd>A</kbd> <kbd>;</kbd> cue</span>
+          <span><kbd>S</kbd> <kbd>L</kbd> skip</span>
           <span><kbd>1</kbd>–<kbd>4</kbd> <kbd>7</kbd>–<kbd>0</kbd> mute stems</span>
           <span><kbd>R</kbd> record</span>
           <span><kbd>F</kbd> fullscreen</span>
