@@ -414,10 +414,10 @@ kbd {
 
 .results li {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   grid-template-areas:
-    'title num dur'
-    'artist num dur';
+    'title num dur src'
+    'artist num dur src';
   align-items: center;
   column-gap: 14px;
   padding: 8px 14px;
@@ -1195,3 +1195,105 @@ kbd {
   color: rgba(255, 255, 255, 0.55);
 }
 
+
+/* ------------------------------------------------------------------ library: stems vs full mix */
+
+.r-source {
+  grid-area: src;
+  justify-self: end;
+}
+
+.badge-stems,
+.results .split {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-block);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-stems {
+  background: color-mix(in srgb, var(--teal) 30%, white);
+  color: #0d5c58;
+}
+
+.results .split {
+  border: 0;
+  background: #ecebf1;
+  color: #4b4b55;
+  cursor: pointer;
+}
+
+.results .split:hover:not(:disabled) {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.results .split:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Which audio the deck is playing, top-right of the screen. */
+.source-chip {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  width: max-content;
+  z-index: 1;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-family: var(--font-block);
+  font-size: 11.5px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.source-chip.is-stems {
+  background: color-mix(in srgb, var(--deck) 30%, transparent);
+  color: #ffffff;
+}
+
+.source-chip.is-full {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Full mix loaded: invite splitting it, in the middle of the waveform screen. */
+.unsplit-note {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+  font-family: var(--font-block);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.unsplit-note .pill {
+  background: var(--deck);
+  color: var(--ink);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--deck) 55%, transparent);
+}
+
+.unsplit-note .pill:disabled {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+.stems.unsplit .fader,
+.stems.unsplit .mute {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mute:disabled {
+  cursor: default;
+}

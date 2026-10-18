@@ -35,6 +35,8 @@ export class AudioEngine {
   readonly ctx: AudioContext;
 
   private readonly master: GainNode;
+  /** Copy of the master mix as a MediaStream, for recording sets. */
+  private readonly recordTap: MediaStreamAudioDestinationNode;
   private readonly channels: Record<DeckId, DeckChannel>;
   private readonly state: AudioEngineState;
   private readonly listeners = new Set<Listener>();
@@ -59,6 +61,9 @@ export class AudioEngine {
     this.buildHpf.frequency.value = BUILD_HPF.min;
     this.buildHpf.Q.value = 0.7;
     this.master.connect(this.buildHpf).connect(this.ctx.destination);
+    // Recordings capture the final mix, build/drop included.
+    this.recordTap = this.ctx.createMediaStreamDestination();
+    this.buildHpf.connect(this.recordTap);
     this.buildSend = this.ctx.createGain();
     this.buildSend.gain.value = 0;
     this.buildDelay = this.ctx.createDelay(2);
@@ -127,6 +132,17 @@ export class AudioEngine {
   /** Live playhead position in seconds — cheap enough to call every animation frame. */
   getPositionSec(deck: DeckId): number {
     return this.channels[deck].position();
+  }
+
+  /** Live output level per stem, 0..1, for meters (all zero while paused). */
+  getLevels(deck: DeckId): Record<StemId, number> {
+    return this.channels[deck].levels();
+  }
+
+  /** The master mix as a MediaStream, e.g. for MediaRecorder. */
+  getOutputStream(): MediaStream {
+    void this.resume();
+    return this.recordTap.stream;
   }
 
   async dispatch(cmd: AudioCommand): Promise<void> {

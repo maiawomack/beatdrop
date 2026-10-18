@@ -1,6 +1,6 @@
 import { forwardRef, useRef, useState, type CSSProperties } from 'react';
-import type { AudioController, DeckState, StemId } from '../../shared/contracts';
-import type { ResolvedTrackIndexEntry } from '../../stems';
+import type { DeckState, StemId, TrackInfo } from '../../shared/types';
+import type { EngineStore } from '../engineStore';
 import { formatTime, useAnimationFrame, type TrackExtras } from '../hooks';
 import { DECK_COLORS } from '../theme';
 import { DeckSearch, type DeckSearchHandle } from './DeckSearch';
@@ -16,22 +16,33 @@ export interface DeckKeys {
 
 interface Props {
   deck: DeckState;
-  controller: AudioController;
+  engine: EngineStore;
   extras: TrackExtras;
   keys: DeckKeys;
-  tracks: ResolvedTrackIndexEntry[];
   serverReady: boolean | null;
-  onSeparated(trackId: string): Promise<ResolvedTrackIndexEntry | undefined>;
 }
 
 /** Stop = pause and rewind to the start (two commands; no separate engine command needed). */
-export function stopDeck(controller: AudioController, deck: DeckState['id']) {
-  controller.dispatch({ type: 'deck/pause', deck });
-  controller.dispatch({ type: 'deck/seek', deck, timeSec: 0 });
+export function stopDeck(engine: EngineStore, deck: DeckState['id']) {
+  engine.dispatch({ type: 'PAUSE', deck });
+  engine.dispatch({ type: 'SEEK', deck, positionSec: 0 });
+}
+
+/**
+ * Load a track. When it's the same song coming back with stems (just split), keep the
+ * playhead and keep playing, so splitting mid-set doesn't interrupt the mix.
+ */
+async function loadOntoDeck(engine: EngineStore, deck: DeckState, track: TrackInfo) {
+  const sameSong = deck.track?.id === track.id;
+  const resumeAt = sameSong ? engine.position(deck.id) : 0;
+  const wasPlaying = sameSong && deck.playing;
+  await engine.engine.dispatch({ type: 'LOAD_TRACK', deck: deck.id, track });
+  if (resumeAt > 0) engine.dispatch({ type: 'SEEK', deck: deck.id, positionSec: resumeAt });
+  if (wasPlaying) engine.dispatch({ type: 'PLAY', deck: deck.id });
 }
 
 export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(props, searchRef) {
-  const { deck, controller, extras, keys, tracks, serverReady, onSeparated } = props;
+  const { deck, engine, extras, keys, serverReady } = props;
   const elapsedRef = useRef<HTMLSpanElement>(null);
   const remainingRef = useRef<HTMLSpanElement>(null);
   const search = useRef<DeckSearchHandle | null>(null);
@@ -40,9 +51,9 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
 
   useAnimationFrame(() => {
     if (!deck.track || !elapsedRef.current || !remainingRef.current) return;
-    const pos = controller.getPosition(deck.id);
+    const pos = engine.position(deck.id);
     elapsedRef.current.textContent = formatTime(pos);
-    remainingRef.current.textContent = `-${formatTime(deck.track.durationSec - pos)}`;
+    remainingRef.current.textContent = `-${formatTime(deck.durationSec - pos)}`;
   });
 
   const setSearch = (handle: DeckSearchHandle | null) => {
@@ -64,17 +75,15 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
         e.preventDefault();
         setDropping(false);
         const file = e.dataTransfer.files[0];
-        if (file) search.current?.separate(file);
+        if (file) search.current?.separateFile(file);
       }}
     >
       <DeckSearch
         ref={setSearch}
         deck={deck.id}
         current={deck.track}
-        tracks={tracks}
         serverReady={serverReady}
-        onLoad={(t) => controller.dispatch({ type: 'deck/load', deck: deck.id, manifestUrl: t.manifestUrl })}
-        onSeparated={onSeparated}
+        onLoad={(t) => void loadOntoDeck(engine, deck, t)}
       />
 
       <div className="deck-row">
@@ -90,7 +99,7 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
           )}
         </span>
         <span className="bpm">
-          {ready ? (deck.track!.bpm * deck.playbackRate).toFixed(1) : '--'}
+          {ready && deck.bpm ? (deck.bpm * deck.playbackRate).toFixed(1) : '--'}
           <small>BPM</small>
         </span>
       </div>
@@ -98,7 +107,7 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
       <div className="transport">
         <button
           className={`pill${deck.playing ? ' on' : ''}`}
-          onClick={() => controller.dispatch({ type: deck.playing ? 'deck/pause' : 'deck/play', deck: deck.id })}
+          onClick={() => engine.dispatch({ type: deck.playing ? 'PAUSE' : 'PLAY', deck: deck.id })}
           disabled={!ready}
         >
           {deck.playing ? (
@@ -109,14 +118,14 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
           {deck.playing ? 'Pause' : 'Play'}
           <kbd>{keys.play}</kbd>
         </button>
-        <button className="pill" onClick={() => stopDeck(controller, deck.id)} disabled={!ready} title="Stop and go back to the start">
+        <button className="pill" onClick={() => stopDeck(engine, deck.id)} disabled={!ready} title="Stop and go back to the start">
           <svg viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="2.5" /></svg>
           Stop
           <kbd>{keys.stop}</kbd>
         </button>
         <button
           className="pill"
-          onClick={() => controller.dispatch({ type: 'deck/seek', deck: deck.id, timeSec: 0 })}
+          onClick={() => engine.dispatch({ type: 'SEEK', deck: deck.id, positionSec: 0 })}
           disabled={!ready}
           title="Jump back to the start (keeps playing)"
         >
@@ -138,11 +147,25 @@ export const DeckPanel = forwardRef<DeckSearchHandle, Props>(function DeckPanel(
             )}
           </span>
         )}
-        <Waveform deck={deck} controller={controller} waveform={extras.waveform} />
-        <Overview deck={deck} controller={controller} waveform={extras.waveform} />
+        {ready && deck.source === 'full' && (
+          <div className="unsplit-note">
+            <span>Full mix · split it to unlock stems, waveform and lyrics</span>
+            <button
+              className="pill"
+              onClick={() => search.current?.split(deck.track!)}
+              disabled={serverReady === false}
+              title={serverReady === false ? 'Start the separation server first' : undefined}
+            >
+              Split into stems
+            </button>
+          </div>
+        )}
+        {ready && <span className={`source-chip is-${deck.source}`}>{deck.source === 'stems' ? 'stems' : 'full mix'}</span>}
+        <Waveform deck={deck} engine={engine} waveform={extras.waveform} firstBeatSec={extras.firstBeatSec} />
+        <Overview deck={deck} engine={engine} waveform={extras.waveform} />
       </div>
 
-      <StemBars deck={deck} controller={controller} muteKeys={keys.mute} />
+      <StemBars deck={deck} engine={engine} muteKeys={keys.mute} />
     </section>
   );
 });
