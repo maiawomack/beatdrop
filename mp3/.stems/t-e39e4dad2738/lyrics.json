@@ -1,0 +1,333 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 37465342,
+ "matchedTitle": "Cold",
+ "matchedArtist": "Maroon 5",
+ "matchedDurationSec": 229.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 4.52,
+   "text": "Cold enough to chill my bones"
+  },
+  {
+   "timeSec": 7.72,
+   "text": "It feels like I don't know you anymore"
+  },
+  {
+   "timeSec": 11.43,
+   "text": "I don't understand why you're so cold to me"
+  },
+  {
+   "timeSec": 15.41,
+   "text": "With every breath you breathe"
+  },
+  {
+   "timeSec": 17.87,
+   "text": "I see there's something going on"
+  },
+  {
+   "timeSec": 21.12,
+   "text": "I don't understand why you're so cold"
+  },
+  {
+   "timeSec": 24.13,
+   "text": "Are we taking time or a time out?"
+  },
+  {
+   "timeSec": 26.33,
+   "text": "I can't take the in between"
+  },
+  {
+   "timeSec": 28.88,
+   "text": "Asking me for space here in my house"
+  },
+  {
+   "timeSec": 31.05,
+   "text": "You know how to fuck with me"
+  },
+  {
+   "timeSec": 33.19,
+   "text": "Acting like we're not together"
+  },
+  {
+   "timeSec": 35.54,
+   "text": "After everything that we've been through"
+  },
+  {
+   "timeSec": 37.89,
+   "text": "Sleeping up under the covers"
+  },
+  {
+   "timeSec": 40.57,
+   "text": "How am I so far away from you?"
+  },
+  {
+   "timeSec": 42.88,
+   "text": "Distant when we're kissing"
+  },
+  {
+   "timeSec": 46.98,
+   "text": "Feel so different"
+  },
+  {
+   "timeSec": 49.6,
+   "text": "Baby tell me how did you get so..."
+  },
+  {
+   "timeSec": 52.23,
+   "text": "Cold enough to chill my bones"
+  },
+  {
+   "timeSec": 55.97,
+   "text": "It feels like I don't know you anymore"
+  },
+  {
+   "timeSec": 59.36,
+   "text": "I don't understand why you're so cold to me"
+  },
+  {
+   "timeSec": 63.46,
+   "text": "With every breath you breathe"
+  },
+  {
+   "timeSec": 65.81,
+   "text": "I see there's something going on"
+  },
+  {
+   "timeSec": 68.95,
+   "text": "I don't understand why you're so cold, yeah"
+  },
+  {
+   "timeSec": 73.42,
+   "text": "Whoa yeah"
+  },
+  {
+   "timeSec": 75.77,
+   "text": "Whoa yeah"
+  },
+  {
+   "timeSec": 78.61,
+   "text": "I don't understand why you're so cold"
+  },
+  {
+   "timeSec": 81.95,
+   "text": "What you holdin' on, holdin' on for?"
+  },
+  {
+   "timeSec": 83.88,
+   "text": "If you wanna leave just leave"
+  },
+  {
+   "timeSec": 86.63,
+   "text": "Why you wanna bite your tongue for?"
+  },
+  {
+   "timeSec": 88.89,
+   "text": "The silence is killing me"
+  },
+  {
+   "timeSec": 90.95,
+   "text": "Acting like we're not together"
+  },
+  {
+   "timeSec": 93.06,
+   "text": "If you don't want this, then what's the use?"
+  },
+  {
+   "timeSec": 95.71,
+   "text": "Sleeping up under the covers"
+  },
+  {
+   "timeSec": 97.98,
+   "text": "How am I so far away from you?"
+  },
+  {
+   "timeSec": 100.57,
+   "text": "Distant (oh) when we're kissing (yeah)"
+  },
+  {
+   "timeSec": 104.49,
+   "text": "Feel so different (yeah)"
+  },
+  {
+   "timeSec": 107.21,
+   "text": "Baby tell me how did you get so..."
+  },
+  {
+   "timeSec": 109.9,
+   "text": "Cold enough to chill my bones"
+  },
+  {
+   "timeSec": 113.42,
+   "text": "It feels like I don't know you anymore"
+  },
+  {
+   "timeSec": 116.99,
+   "text": "I don't understand why you're so cold to me"
+  },
+  {
+   "timeSec": 120.96,
+   "text": "With every breath you breathe"
+  },
+  {
+   "timeSec": 123.42,
+   "text": "I see there's something going on"
+  },
+  {
+   "timeSec": 126.63,
+   "text": "I don't understand why you're so cold, yeah"
+  },
+  {
+   "timeSec": 131.05,
+   "text": "Whoa yeah"
+  },
+  {
+   "timeSec": 133.4,
+   "text": "Whoa yeah"
+  },
+  {
+   "timeSec": 136.01,
+   "text": "I don't understand why you're so cold, yeah"
+  },
+  {
+   "timeSec": 139.84,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 142.11,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 144.54,
+   "text": "(So cold it's colder)"
+  },
+  {
+   "timeSec": 145.93,
+   "text": "I don't understand why you're so cold"
+  },
+  {
+   "timeSec": 149.47,
+   "text": "Never thought that you were like this"
+  },
+  {
+   "timeSec": 151.31,
+   "text": "I took the tag off and made you priceless"
+  },
+  {
+   "timeSec": 153.53,
+   "text": "I just spent half a mill' on a chandelier"
+  },
+  {
+   "timeSec": 155.72,
+   "text": "Now you tryna cut me off like a light switch, yeah"
+  },
+  {
+   "timeSec": 158.64,
+   "text": "Tryna stay, and I leave"
+  },
+  {
+   "timeSec": 160.82,
+   "text": "Saying that you need some time to breath"
+  },
+  {
+   "timeSec": 163.54,
+   "text": "Thinking that I'm sleeping on the four letter word"
+  },
+  {
+   "timeSec": 165.78,
+   "text": "But the four letter word don't sleep"
+  },
+  {
+   "timeSec": 168.1,
+   "text": "We goin' two separate ways"
+  },
+  {
+   "timeSec": 170.58,
+   "text": "You ain't been acting the same"
+  },
+  {
+   "timeSec": 173.18,
+   "text": "You gotta go, but the way your ass used to be"
+  },
+  {
+   "timeSec": 175.85,
+   "text": "You gold dig every day"
+  },
+  {
+   "timeSec": 177.84,
+   "text": "I split the four talk to the two talk"
+  },
+  {
+   "timeSec": 179.59,
+   "text": "'Cause I can't let my job be hear what you say"
+  },
+  {
+   "timeSec": 182.74,
+   "text": "Girl I tried to give you space"
+  },
+  {
+   "timeSec": 184.11,
+   "text": "Baby tell me how did you get so cold enough to chill my bones"
+  },
+  {
+   "timeSec": 190.19,
+   "text": "It feels like I don't know you anymore"
+  },
+  {
+   "timeSec": 193.95,
+   "text": "I don't understand why you're so cold to me"
+  },
+  {
+   "timeSec": 197.82,
+   "text": "With every breath you breathe"
+  },
+  {
+   "timeSec": 200.32,
+   "text": "I see there's something going on"
+  },
+  {
+   "timeSec": 203.54,
+   "text": "I don't understand why you're so cold"
+  },
+  {
+   "timeSec": 206.98,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 209.44,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 211.88,
+   "text": "(So cold it's colder)"
+  },
+  {
+   "timeSec": 213.14,
+   "text": "I don't understand why you're so cold, yeah"
+  },
+  {
+   "timeSec": 216.54,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 218.99,
+   "text": "(So cold it's colder) Whoa yeah"
+  },
+  {
+   "timeSec": 221.49,
+   "text": "(So cold it's colder)"
+  },
+  {
+   "timeSec": 222.55,
+   "text": "I don't understand why you're so cold"
+  },
+  {
+   "timeSec": 225.15,
+   "text": ""
+  }
+ ],
+ "plain": "Cold enough to chill my bones\nIt feels like I don't know you anymore\nI don't understand why you're so cold to me\nWith every breath you breathe\nI see there's something going on\nI don't understand why you're so cold\n\nAre we taking time or a time out?\nI can't take the in between\nAsking me for space here in my house\nYou know how to fuck with me\n\nActing like we're not together\nAfter everything that we've been through\nSleeping up under the covers\nHow am I so far away from you?\n\nDistant when we're kissing\nFeel so different\nBaby tell me how did you get so...\n\nCold enough to chill my bones\nIt feels like I don't know you anymore\nI don't understand why you're so cold to me\nWith every breath you breathe\nI see there's something going on\nI don't understand why you're so cold, yeah\n\nWhoa yeah\nWhoa yeah\nI don't understand why you're so cold\n\nWhat you holdin' on, holdin' on for?\nIf you wanna leave just leave\nWhy you wanna bite your tongue for?\nThe silence is killing me\n\nActing like we're not together\nIf you don't want this, then what's the use?\nSleeping up under the covers\nHow am I so far away from you?\n\nDistant (oh) when we're kissing (yeah)\nFeel so different (yeah)\nBaby tell me how did you get so...\n\nCold enough to chill my bones\nIt feels like I don't know you anymore\nI don't understand why you're so cold to me\nWith every breath you breathe\nI see there's something going on\nI don't understand why you're so cold, yeah\n\nWhoa yeah\nWhoa yeah\nI don't understand why you're so cold, yeah\n(So cold it's colder) Whoa yeah\n(So cold it's colder) Whoa yeah\n(So cold it's colder)\nI don't understand why you're so cold\n\nNever thought that you were like this\nI took the tag off and made you priceless\nI just spent half a mill' on a chandelier\nNow you tryna cut me off like a light switch, yeah\n\nTryna stay, and I leave\nSaying that you need some time to breath\nThinking that I'm sleeping on the four letter word\nBut the four letter word don't sleep\n\nWe goin' two separate ways\nYou ain't been acting the same\nYou gotta go, but the way your ass used to be\nYou gold dig every day\nI split the four talk to the two talk\n'Cause I can't let my job be hear what you say\nGirl I tried to give you space\n\nBaby tell me how did you get so cold enough to chill my bones\nIt feels like I don't know you anymore\nI don't understand why you're so cold to me\nWith every breath you breathe\nI see there's something going on\nI don't understand why you're so cold\n\n(So cold it's colder) Whoa yeah\n(So cold it's colder) Whoa yeah\n(So cold it's colder)\nI don't understand why you're so cold, yeah\n\n(So cold it's colder) Whoa yeah\n(So cold it's colder) Whoa yeah\n(So cold it's colder)\nI don't understand why you're so cold"
+}

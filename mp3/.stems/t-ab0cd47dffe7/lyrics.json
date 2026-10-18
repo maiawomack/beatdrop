@@ -1,0 +1,341 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 28992368,
+ "matchedTitle": "2 On",
+ "matchedArtist": "Tinashe",
+ "matchedDurationSec": 230.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 3.52,
+   "text": "Mustard on the beat, ho"
+  },
+  {
+   "timeSec": 4.83,
+   "text": "Give me all that you got now"
+  },
+  {
+   "timeSec": 9.21,
+   "text": "Make you want me 'cause I'm hot now"
+  },
+  {
+   "timeSec": 13.94,
+   "text": "I'm gone, so faded, I'm on one"
+  },
+  {
+   "timeSec": 18.68,
+   "text": "Bang, bang, pop off like a long gun"
+  },
+  {
+   "timeSec": 23.9,
+   "text": "If you a lame nigga, you ain't makin' no noise"
+  },
+  {
+   "timeSec": 26.28,
+   "text": "Get faded, turn up with the big boys"
+  },
+  {
+   "timeSec": 28.68,
+   "text": "Live fast, die young, that's my choice"
+  },
+  {
+   "timeSec": 30.95,
+   "text": "Get money, get money like an invoice"
+  },
+  {
+   "timeSec": 32.84,
+   "text": "We can mob all in the whip (make the money)"
+  },
+  {
+   "timeSec": 35.4,
+   "text": "Make the money, make a grip (I be stuntin')"
+  },
+  {
+   "timeSec": 37.74,
+   "text": "I be stuntin' with my clique (gettin' faded)"
+  },
+  {
+   "timeSec": 40.12,
+   "text": "Gettin' faded 'til we trip (oh)"
+  },
+  {
+   "timeSec": 42.79,
+   "text": "Man, I love to get on"
+  },
+  {
+   "timeSec": 45.85,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 48.52,
+   "text": "When the drink be too strong"
+  },
+  {
+   "timeSec": 50.62,
+   "text": "When the tree be way too strong"
+  },
+  {
+   "timeSec": 52.74,
+   "text": "Get-get-get faded, turn up, bruh"
+  },
+  {
+   "timeSec": 54.58,
+   "text": "Pour it on up 'til I can't even think no more"
+  },
+  {
+   "timeSec": 57.44,
+   "text": "Get-get-get ratchet, go dumb then go more dumb then"
+  },
+  {
+   "timeSec": 60.68,
+   "text": "We can keep it lit, let's roll"
+  },
+  {
+   "timeSec": 62.64,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 64.94,
+   "text": "Let's-let's, let's roll"
+  },
+  {
+   "timeSec": 67.39,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 69.79,
+   "text": "I love to-, let-let-let's roll"
+  },
+  {
+   "timeSec": 72.05,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 74.45,
+   "text": "Let's-let's, let's roll"
+  },
+  {
+   "timeSec": 76.81,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 79.24,
+   "text": "I love to-, let-let-let's roll"
+  },
+  {
+   "timeSec": 81.66,
+   "text": "Yeah, we can get active"
+  },
+  {
+   "timeSec": 85.15,
+   "text": "And all my bitches attractive"
+  },
+  {
+   "timeSec": 90.15,
+   "text": "We go, you know who we are now"
+  },
+  {
+   "timeSec": 94.5,
+   "text": "Get high, hotbox in my car now"
+  },
+  {
+   "timeSec": 99.86,
+   "text": "If you a lame nigga, you ain't makin' no noise"
+  },
+  {
+   "timeSec": 102.1,
+   "text": "Get faded, turn up with the big boys"
+  },
+  {
+   "timeSec": 104.59,
+   "text": "Live fast, die young, that's my choice"
+  },
+  {
+   "timeSec": 107.26,
+   "text": "Get money, get money like an invoice"
+  },
+  {
+   "timeSec": 109.08,
+   "text": "We can mob all in the whip (make the money)"
+  },
+  {
+   "timeSec": 111.37,
+   "text": "Make the money, make a grip (I be stuntin')"
+  },
+  {
+   "timeSec": 113.72,
+   "text": "I be stuntin' with my clique (gettin' faded)"
+  },
+  {
+   "timeSec": 116.32,
+   "text": "Gettin' faded 'til we trip (oh)"
+  },
+  {
+   "timeSec": 118.87,
+   "text": "Man, I love to get on"
+  },
+  {
+   "timeSec": 122.06,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 124.34,
+   "text": "When the drink be too strong"
+  },
+  {
+   "timeSec": 126.76,
+   "text": "When the tree be way too strong"
+  },
+  {
+   "timeSec": 128.81,
+   "text": "Get-get-get faded, turn up, bruh"
+  },
+  {
+   "timeSec": 130.66,
+   "text": "Pour it on up 'til I can't even think no more"
+  },
+  {
+   "timeSec": 133.58,
+   "text": "Get-get-get ratchet, go dumb then go more dumb then"
+  },
+  {
+   "timeSec": 136.56,
+   "text": "We can keep it lit, let's roll"
+  },
+  {
+   "timeSec": 138.76,
+   "text": "I love to get 2 on (I love it)"
+  },
+  {
+   "timeSec": 141.03,
+   "text": "Let's-let's, let's roll"
+  },
+  {
+   "timeSec": 143.44,
+   "text": "I love to get 2 on (I love it)"
+  },
+  {
+   "timeSec": 145.8,
+   "text": "I love to-, let-let-let's roll"
+  },
+  {
+   "timeSec": 147.79,
+   "text": "Uh, pull your panties down from under you"
+  },
+  {
+   "timeSec": 149.84,
+   "text": "Beat that pussy up, make you wanna holla Q"
+  },
+  {
+   "timeSec": 152.29,
+   "text": "Drunk than a bitch, high on that Mary Jane"
+  },
+  {
+   "timeSec": 154.83,
+   "text": "Pussy in my mouth, pussy on my pinky ring"
+  },
+  {
+   "timeSec": 157.19,
+   "text": "Nasty, baby do it in the backseat"
+  },
+  {
+   "timeSec": 159.21,
+   "text": "Swear this marijuana keep it crackin'"
+  },
+  {
+   "timeSec": 160.86,
+   "text": "Lights, camera, action, I ain't doin' nothin' 'til the cash in"
+  },
+  {
+   "timeSec": 163.95,
+   "text": "Money, money, money, weed, fashion"
+  },
+  {
+   "timeSec": 165.76,
+   "text": "Draped up and dripped out, keep the trees passin'"
+  },
+  {
+   "timeSec": 167.82,
+   "text": "Girl, toot that thing up, fuck me, fuck rappin'"
+  },
+  {
+   "timeSec": 170.55,
+   "text": "Days of our lives so clap, clap that cake"
+  },
+  {
+   "timeSec": 172.83,
+   "text": "Spreadin' your thighs, I pump, pump your brakes, ay"
+  },
+  {
+   "timeSec": 176.02,
+   "text": "Just give me the trees, and we can smoke it, yeah (smoke it, yeah)"
+  },
+  {
+   "timeSec": 180.74,
+   "text": "Just give me the drink, and we can pour it, yeah (pour it, yeah)"
+  },
+  {
+   "timeSec": 185.4,
+   "text": "And my enemies, they see me livin' now (livin' now)"
+  },
+  {
+   "timeSec": 190.4,
+   "text": "And if you roll with me, then you'll be winnin' now, oh"
+  },
+  {
+   "timeSec": 194.71,
+   "text": "Man, I love to get on"
+  },
+  {
+   "timeSec": 198.02,
+   "text": "I love to get 2 on"
+  },
+  {
+   "timeSec": 200.33,
+   "text": "When the drink be too strong"
+  },
+  {
+   "timeSec": 202.79,
+   "text": "When the tree be way too strong"
+  },
+  {
+   "timeSec": 204.88,
+   "text": "Get-get-get faded, turn up, bruh"
+  },
+  {
+   "timeSec": 206.67,
+   "text": "Pour it on up 'til I can't even think no more"
+  },
+  {
+   "timeSec": 209.55,
+   "text": "Get-get-get ratchet, go dumb then go more dumb then"
+  },
+  {
+   "timeSec": 212.5,
+   "text": "We can keep it lit, let's roll"
+  },
+  {
+   "timeSec": 214.53,
+   "text": "I love to get 2 on (I love it)"
+  },
+  {
+   "timeSec": 216.94,
+   "text": "Let's-let's, let's roll"
+  },
+  {
+   "timeSec": 219.36,
+   "text": "I love to get 2 on (I love it)"
+  },
+  {
+   "timeSec": 221.79,
+   "text": "I love to-, let-let-let's roll"
+  },
+  {
+   "timeSec": 224.38,
+   "text": ""
+  }
+ ],
+ "plain": "Mustard on the beat, ho\n\nGive me all that you got now\nMake you want me 'cause I'm hot now\nI'm gone, so faded, I'm on one\nBang, bang, pop off like a long gun\n\nIf you a lame nigga, you ain't makin' no noise\nGet faded, turn up with the big boys\nLive fast, die young, that's my choice\nGet money, get money like an invoice\n\nWe can mob all in the whip (make the money)\nMake the money, make a grip (I be stuntin')\nI be stuntin' with my clique (gettin' faded)\nGettin' faded 'til we trip (oh)\n\nMan, I love to get on\nI love to get 2 on\nWhen the drink be too strong\nWhen the tree be way too strong\n\nGet-get-get faded, turn up, bruh\nPour it on up 'til I can't even think no more\nGet-get-get ratchet, go dumb then go more dumb then\nWe can keep it lit, let's roll\n\nI love to get 2 on\nLet's-let's, let's roll\nI love to get 2 on\nI love to-, let-let-let's roll\n\nI love to get 2 on\nLet's-let's, let's roll\nI love to get 2 on\nI love to-, let-let-let's roll\n\nYeah, we can get active\nAnd all my bitches attractive\nWe go, you know who we are now\nGet high, hotbox in my car now\n\nIf you a lame nigga, you ain't makin' no noise\nGet faded, turn up with the big boys\nLive fast, die young, that's my choice\nGet money, get money like an invoice\n\nWe can mob all in the whip (make the money)\nMake the money, make a grip (I be stuntin')\nI be stuntin' with my clique (gettin' faded)\nGettin' faded 'til we trip (oh)\n\nMan, I love to get on\nI love to get 2 on\nWhen the drink be too strong\nWhen the tree be way too strong\n\nGet-get-get faded, turn up, bruh\nPour it on up 'til I can't even think no more\nGet-get-get ratchet, go dumb then go more dumb then\nWe can keep it lit, let's roll\n\nI love to get 2 on (I love it)\nLet's-let's, let's roll\nI love to get 2 on (I love it)\nI love to-, let-let-let's roll\n\nUh, pull your panties down from under you\nBeat that pussy up, make you wanna holla Q\nDrunk than a bitch, high on that Mary Jane\nPussy in my mouth, pussy on my pinky ring\n\nNasty, baby do it in the backseat\nSwear this marijuana keep it crackin'\nLights, camera, action, I ain't doin' nothin' 'til the cash in\nMoney, money, money, weed, fashion\n\nDraped up and dripped out, keep the trees passin'\nGirl, toot that thing up, fuck me, fuck rappin'\nDays of our lives so clap, clap that cake\nSpreadin' your thighs, I pump, pump your brakes, ay\n\nJust give me the trees, and we can smoke it, yeah (smoke it, yeah)\nJust give me the drink, and we can pour it, yeah (pour it, yeah)\nAnd my enemies, they see me livin' now (livin' now)\nAnd if you roll with me, then you'll be winnin' now, oh\n\nMan, I love to get on\nI love to get 2 on\nWhen the drink be too strong\nWhen the tree be way too strong\n\nGet-get-get faded, turn up, bruh\nPour it on up 'til I can't even think no more\nGet-get-get ratchet, go dumb then go more dumb then\nWe can keep it lit, let's roll\n\nI love to get 2 on (I love it)\nLet's-let's, let's roll\nI love to get 2 on (I love it)\nI love to-, let-let-let's roll"
+}

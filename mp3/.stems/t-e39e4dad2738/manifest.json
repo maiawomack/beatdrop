@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-e39e4dad2738",
+  "title": "Cold ft. Future",
+  "artist": "Maroon 5",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10115585,
+  "durationSec": 229.3783,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 229.3783,
+  "bpm": 133.33,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.061,
+  "gainDb": -2.53,
+  "mixPeakDb": -2.21,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.57,
+      "rmsDb": -19.77
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.62,
+      "rmsDb": -23.51
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -7.13,
+      "rmsDb": -17.16
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.05,
+      "rmsDb": -25.34
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

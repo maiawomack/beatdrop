@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-accf35503c0e",
+  "title": "Wait",
+  "artist": "Maroon 5",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8359937,
+  "durationSec": 189.5677,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 189.5677,
+  "bpm": 126.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.0174,
+  "gainDb": -3.02,
+  "mixPeakDb": -1.3,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.11,
+      "rmsDb": -19.93
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.11,
+      "rmsDb": -23.51
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -5.84,
+      "rmsDb": -17.48
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -4.29,
+      "rmsDb": -24.25
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

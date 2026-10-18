@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-a0613b07c822",
+  "title": "Beauty And A Beat ft. Nicki Minaj",
+  "artist": "Justin Bieber",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10068993,
+  "durationSec": 228.3218,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 228.3218,
+  "bpm": 128.01,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.1277,
+  "gainDb": 2.02,
+  "mixPeakDb": -1.35,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.68,
+      "rmsDb": -21.37
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.36,
+      "rmsDb": -17.48
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.14,
+      "rmsDb": -20.03
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.2,
+      "rmsDb": -27.61
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

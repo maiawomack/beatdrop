@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-27f557ebbf30",
+  "title": "Rude Boy",
+  "artist": "Rihanna",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9915905,
+  "durationSec": 224.8505,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 224.8505,
+  "bpm": 87.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.1393,
+  "gainDb": -1.99,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.47,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.07,
+      "rmsDb": -19.58
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.07,
+      "rmsDb": -19.21
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -8.72,
+      "rmsDb": -24.04
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.88,
+      "rmsDb": -24.18
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

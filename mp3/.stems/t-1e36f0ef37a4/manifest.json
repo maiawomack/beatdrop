@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-1e36f0ef37a4",
+  "title": "I Wanna Dance with Somebody (Who Loves Me)",
+  "artist": "Whitney Houston",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 12852225,
+  "durationSec": 291.4337,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 291.4337,
+  "bpm": 118.83,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.2641,
+  "gainDb": -2.15,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -16.13,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.23,
+      "rmsDb": -19.74
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.23,
+      "rmsDb": -22.69
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -10.56,
+      "rmsDb": -24.62
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.25,
+      "rmsDb": -25.87
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
