@@ -7,7 +7,8 @@
 import { loadTrack } from './loadTrack';
 import type { LoadedTrack } from './types';
 
-export const DEFAULT_SEPARATION_SERVER = 'http://127.0.0.1:8765';
+/** The Python service; set VITE_SERVICE_URL at build time when it runs elsewhere (deployed). */
+export const DEFAULT_SEPARATION_SERVER = import.meta.env.VITE_SERVICE_URL || 'http://127.0.0.1:8765';
 
 export type SeparationState = 'queued' | 'decoding' | 'separating' | 'analyzing' | 'done' | 'error';
 
