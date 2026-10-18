@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-43fd4a22f042",
+  "title": "Promiscuous",
+  "artist": "Nelly Furtado, Timbaland",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10984961,
+  "durationSec": 249.0921,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 249.0921,
+  "bpm": 76.2,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.5602,
+  "gainDb": -2.6,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.06,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.69,
+      "rmsDb": -20.5
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.69,
+      "rmsDb": -17.8
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -3.93,
+      "rmsDb": -20.95
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -7.27,
+      "rmsDb": -27.05
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

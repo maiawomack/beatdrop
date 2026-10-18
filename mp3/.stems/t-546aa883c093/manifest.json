@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-546aa883c093",
+  "title": "Track10",
+  "artist": "Charli XCX",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 14415873,
+  "durationSec": 326.8905,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 326.8905,
+  "bpm": 133.33,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.3686,
+  "gainDb": -5.16,
+  "mixPeakDb": -3.55,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -5.25,
+      "rmsDb": -22.84
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -5.25,
+      "rmsDb": -24.56
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -5.25,
+      "rmsDb": -18.22
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -5.25,
+      "rmsDb": -20.92
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": null,
+  "cover": null
+}

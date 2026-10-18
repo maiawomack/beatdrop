@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-e57d5e9c44a8",
+  "title": "DON\u2019T BELIEVE IT",
+  "artist": "John Summit, Absolutely",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8415456,
+  "durationSec": 190.8267,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 190.8267,
+  "bpm": 128.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.3947,
+  "gainDb": -3.43,
+  "mixPeakDb": -1.57,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.52,
+      "rmsDb": -21.71
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.52,
+      "rmsDb": -18.84
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -6.23,
+      "rmsDb": -20.25
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.52,
+      "rmsDb": -21.55
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

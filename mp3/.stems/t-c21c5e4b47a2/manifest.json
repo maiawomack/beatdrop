@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-c21c5e4b47a2",
+  "title": "Tate Mcrae",
+  "artist": "Vicious",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8129571,
+  "durationSec": 184.344,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 184.344,
+  "bpm": 104.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.1712,
+  "gainDb": -4.44,
+  "mixPeakDb": -4.16,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -4.53,
+      "rmsDb": -21.26
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -4.53,
+      "rmsDb": -19.86
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -5.21,
+      "rmsDb": -17.31
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -7.62,
+      "rmsDb": -32.62
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": null,
+  "cover": null
+}

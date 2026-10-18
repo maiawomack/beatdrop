@@ -1,0 +1,289 @@
+{
+ "version": 1,
+ "source": "lrclib",
+ "sourceId": 36962115,
+ "matchedTitle": "Shake It Off",
+ "matchedArtist": "Taylor Swift",
+ "matchedDurationSec": 219.0,
+ "instrumental": false,
+ "synced": true,
+ "lines": [
+  {
+   "timeSec": 5.61,
+   "text": "I stay out too late"
+  },
+  {
+   "timeSec": 8.4,
+   "text": "Got nothin' in my brain"
+  },
+  {
+   "timeSec": 11.6,
+   "text": "That's what people say, mm-mm"
+  },
+  {
+   "timeSec": 14.6,
+   "text": "That's what people say, mm-mm"
+  },
+  {
+   "timeSec": 17.2,
+   "text": "I go on too many dates"
+  },
+  {
+   "timeSec": 20.4,
+   "text": "But I can't make 'em stay"
+  },
+  {
+   "timeSec": 23.01,
+   "text": "At least that's what people say, mm-mm"
+  },
+  {
+   "timeSec": 26.57,
+   "text": "That's what people say, mm-mm"
+  },
+  {
+   "timeSec": 29.23,
+   "text": "But I keep cruisin'"
+  },
+  {
+   "timeSec": 31.84,
+   "text": "Can't stop, won't stop movin'"
+  },
+  {
+   "timeSec": 34.65,
+   "text": "It's like I got this music"
+  },
+  {
+   "timeSec": 37.82,
+   "text": "In my mind sayin', \"It's gonna be alright\""
+  },
+  {
+   "timeSec": 41.93,
+   "text": "'Cause the players gonna play, play, play, play, play"
+  },
+  {
+   "timeSec": 44.99,
+   "text": "And the haters gonna hate, hate, hate, hate, hate"
+  },
+  {
+   "timeSec": 47.94,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 51.17,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 53.95,
+   "text": "Heartbreakers gonna break, break, break, break, break"
+  },
+  {
+   "timeSec": 56.97,
+   "text": "And the fakers gonna fake, fake, fake, fake, fake"
+  },
+  {
+   "timeSec": 59.95,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 63.16,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 65.42,
+   "text": "I never miss a beat"
+  },
+  {
+   "timeSec": 68.4,
+   "text": "I'm lightnin' on my feet"
+  },
+  {
+   "timeSec": 71.41,
+   "text": "And that's what they don't see, mm-mm"
+  },
+  {
+   "timeSec": 74.62,
+   "text": "That's what they don't see, mm-mm"
+  },
+  {
+   "timeSec": 77.42,
+   "text": "I'm dancin' on my own (dancin' on my own)"
+  },
+  {
+   "timeSec": 80.06,
+   "text": "I'll make the moves up as I go (moves up as I go)"
+  },
+  {
+   "timeSec": 83.41,
+   "text": "And that's what they don't know, mm-mm"
+  },
+  {
+   "timeSec": 86.62,
+   "text": "That's what they don't know, mm-mm"
+  },
+  {
+   "timeSec": 89.19,
+   "text": "But I keep cruisin'"
+  },
+  {
+   "timeSec": 91.84,
+   "text": "Can't stop, won't stop groovin'"
+  },
+  {
+   "timeSec": 94.65,
+   "text": "It's like I got this music"
+  },
+  {
+   "timeSec": 97.84,
+   "text": "In my mind sayin', \"It's gonna be alright\""
+  },
+  {
+   "timeSec": 101.95,
+   "text": "'Cause the players gonna play, play, play, play, play"
+  },
+  {
+   "timeSec": 105.0,
+   "text": "And the haters gonna hate, hate, hate, hate, hate"
+  },
+  {
+   "timeSec": 107.98,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 111.2,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 113.93,
+   "text": "Heartbreakers gonna break, break, break, break, break"
+  },
+  {
+   "timeSec": 116.96,
+   "text": "And the fakers gonna fake, fake, fake, fake, fake"
+  },
+  {
+   "timeSec": 119.97,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 123.16,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 126.32,
+   "text": "Shake it off, I shake it off"
+  },
+  {
+   "timeSec": 128.43,
+   "text": "I, I, I shake it off, I shake it off"
+  },
+  {
+   "timeSec": 131.43,
+   "text": "I, I, I shake it off, I shake it off"
+  },
+  {
+   "timeSec": 134.4,
+   "text": "I, I, I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 139.1,
+   "text": "Hey, hey, hey"
+  },
+  {
+   "timeSec": 140.58,
+   "text": "Just think, while you've been gettin' down and out"
+  },
+  {
+   "timeSec": 142.67,
+   "text": "About the liars and the dirty, dirty cheats of the world"
+  },
+  {
+   "timeSec": 145.63,
+   "text": "You could've been gettin' down to this sick beat"
+  },
+  {
+   "timeSec": 150.33,
+   "text": "My ex-man brought his new girlfriend"
+  },
+  {
+   "timeSec": 152.95,
+   "text": "She's like, \"Oh my God,\" but I'm just gonna shake"
+  },
+  {
+   "timeSec": 155.79,
+   "text": "And to the fella over there with the hella good hair"
+  },
+  {
+   "timeSec": 158.95,
+   "text": "Won't you come on over, baby? We can shake, shake, shake"
+  },
+  {
+   "timeSec": 163.68,
+   "text": "Yeah, oh"
+  },
+  {
+   "timeSec": 165.0,
+   "text": "'Cause the players gonna play, play, play, play, play"
+  },
+  {
+   "timeSec": 167.95,
+   "text": "And the haters gonna hate, hate, hate, hate, hate (haters gonna hate)"
+  },
+  {
+   "timeSec": 170.94,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 174.18,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 176.93,
+   "text": "Heartbreakers gonna break, break, break, break, break (mm-mm)"
+  },
+  {
+   "timeSec": 180.0,
+   "text": "And the fakers gonna fake, fake, fake, fake, fake (and fake, and fake, and fake)"
+  },
+  {
+   "timeSec": 182.98,
+   "text": "Baby, I'm just gonna shake, shake, shake, shake, shake"
+  },
+  {
+   "timeSec": 186.17,
+   "text": "I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 189.33,
+   "text": "Shake it off, I shake it off"
+  },
+  {
+   "timeSec": 191.46,
+   "text": "I, I, I shake it off, I shake it off"
+  },
+  {
+   "timeSec": 194.43,
+   "text": "I, I, I shake it off, I shake it off"
+  },
+  {
+   "timeSec": 197.43,
+   "text": "I, I, I shake it off, I shake it off (ooh-ooh-ooh)"
+  },
+  {
+   "timeSec": 201.32,
+   "text": "Shake it off, I shake it off"
+  },
+  {
+   "timeSec": 203.42,
+   "text": "I, I, I shake it off, I shake it off"
+  },
+  {
+   "timeSec": 206.16,
+   "text": "(You got to) shake it off, I shake it off"
+  },
+  {
+   "timeSec": 209.42,
+   "text": "I, I, I shake it off, I shake it off"
+  }
+ ],
+ "plain": "I stay out too late\nGot nothin' in my brain\nThat's what people say, mm-mm\nThat's what people say, mm-mm\nI go on too many dates\nBut I can't make 'em stay\nAt least that's what people say, mm-mm\nThat's what people say, mm-mm\nBut I keep cruisin'\nCan't stop, won't stop movin'\nIt's like I got this music\nIn my mind sayin', \"It's gonna be alright\"\n'Cause the players gonna play, play, play, play, play\nAnd the haters gonna hate, hate, hate, hate, hate\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nHeartbreakers gonna break, break, break, break, break\nAnd the fakers gonna fake, fake, fake, fake, fake\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nI never miss a beat\nI'm lightnin' on my feet\nAnd that's what they don't see, mm-mm\nThat's what they don't see, mm-mm\nI'm dancin' on my own (dancin' on my own)\nI'll make the moves up as I go (moves up as I go)\nAnd that's what they don't know, mm-mm\nThat's what they don't know, mm-mm\nBut I keep cruisin'\nCan't stop, won't stop groovin'\nIt's like I got this music\nIn my mind sayin', \"It's gonna be alright\"\n'Cause the players gonna play, play, play, play, play\nAnd the haters gonna hate, hate, hate, hate, hate\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nHeartbreakers gonna break, break, break, break, break\nAnd the fakers gonna fake, fake, fake, fake, fake\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nShake it off, I shake it off\nI, I, I shake it off, I shake it off\nI, I, I shake it off, I shake it off\nI, I, I shake it off, I shake it off (ooh-ooh-ooh)\nHey, hey, hey\nJust think, while you've been gettin' down and out\nAbout the liars and the dirty, dirty cheats of the world\nYou could've been gettin' down to this sick beat\nMy ex-man brought his new girlfriend\nShe's like, \"Oh my God,\" but I'm just gonna shake\nAnd to the fella over there with the hella good hair\nWon't you come on over, baby? We can shake, shake, shake\nYeah, oh\n'Cause the players gonna play, play, play, play, play\nAnd the haters gonna hate, hate, hate, hate, hate (haters gonna hate)\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nHeartbreakers gonna break, break, break, break, break (mm-mm)\nAnd the fakers gonna fake, fake, fake, fake, fake (and fake, and fake, and fake)\nBaby, I'm just gonna shake, shake, shake, shake, shake\nI shake it off, I shake it off (ooh-ooh-ooh)\nShake it off, I shake it off\nI, I, I shake it off, I shake it off\nI, I, I shake it off, I shake it off\nI, I, I shake it off, I shake it off (ooh-ooh-ooh)\nShake it off, I shake it off\nI, I, I shake it off, I shake it off\n(You got to) shake it off, I shake it off\nI, I, I shake it off, I shake it off"
+}

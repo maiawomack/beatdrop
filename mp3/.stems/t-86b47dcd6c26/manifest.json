@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-86b47dcd6c26",
+  "title": "Sports Car",
+  "artist": "Tate McRae",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 7292929,
+  "durationSec": 165.3725,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 165.3725,
+  "bpm": 107.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.2757,
+  "gainDb": -3.74,
+  "mixPeakDb": -2.73,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.85,
+      "rmsDb": -22.91
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.83,
+      "rmsDb": -19.13
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -5.02,
+      "rmsDb": -18.22
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.08,
+      "rmsDb": -25.46
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
