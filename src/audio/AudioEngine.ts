@@ -4,12 +4,22 @@ import {
   STEM_IDS,
   type AudioCommand,
   type AudioEngineState,
+  type ChannelKey,
   type DeckId,
   type DeckState,
   type StemId,
 } from '../shared/types';
 import { loadTrack as loadStems } from '../stems';
 import { DeckChannel, clamp } from './DeckChannel';
+import { estimateTempo } from './tempo';
+
+/** Build-up: master high-pass sweep range (Hz). */
+const BUILD_HPF = { min: 12, max: 1400 };
+/** Build-up: how much each stem is ducked at full build. Full mixes rely on the high-pass. */
+const BUILD_DUCK: Partial<Record<ChannelKey, number>> = { bass: 0.85, drums: 0.3 };
+const BEATS_PER_BAR = 4;
+/** Scheduling headroom for beat-quantized events (s). */
+const LEAD = 0.05;
 
 type Listener = (state: AudioEngineState) => void;
 
@@ -30,11 +40,45 @@ export class AudioEngine {
   private readonly listeners = new Set<Listener>();
   private readonly loadSeq: Record<DeckId, number> = { A: 0, B: 0 };
   private readonly loadAbort: Record<DeckId, AbortController | null> = { A: null, B: null };
+  // Build/drop master chain (spatial workstation).
+  private readonly buildHpf: BiquadFilterNode;
+  private readonly buildSend: GainNode;
+  private readonly buildDelay: DelayNode;
+  private readonly riserGain: GainNode;
+  private readonly riserBand: BiquadFilterNode;
+  private readonly noise: AudioBuffer;
+  private riserSource: AudioBufferSourceNode | null = null;
+  private dropTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
     this.master = this.ctx.createGain();
-    this.master.connect(this.ctx.destination);
+    // master ─► build high-pass ─► out, plus an echo wash and a noise riser for build-ups.
+    this.buildHpf = this.ctx.createBiquadFilter();
+    this.buildHpf.type = 'highpass';
+    this.buildHpf.frequency.value = BUILD_HPF.min;
+    this.buildHpf.Q.value = 0.7;
+    this.master.connect(this.buildHpf).connect(this.ctx.destination);
+    this.buildSend = this.ctx.createGain();
+    this.buildSend.gain.value = 0;
+    this.buildDelay = this.ctx.createDelay(2);
+    this.buildDelay.delayTime.value = 0.375;
+    const feedback = this.ctx.createGain();
+    feedback.gain.value = 0.4;
+    const tone = this.ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 3500;
+    this.master.connect(this.buildSend).connect(this.buildDelay);
+    this.buildDelay.connect(tone).connect(feedback).connect(this.buildDelay);
+    tone.connect(this.buildHpf);
+    this.noise = noiseBuffer(this.ctx, 2);
+    this.riserBand = this.ctx.createBiquadFilter();
+    this.riserBand.type = 'bandpass';
+    this.riserBand.frequency.value = 300;
+    this.riserBand.Q.value = 1.4;
+    this.riserGain = this.ctx.createGain();
+    this.riserGain.gain.value = 0;
+    this.riserBand.connect(this.riserGain).connect(this.buildHpf);
 
     this.channels = {
       A: new DeckChannel(this.ctx, this.master),
@@ -42,7 +86,7 @@ export class AudioEngine {
     };
     this.state = {
       decks: { A: emptyDeck('A'), B: emptyDeck('B') },
-      mixer: { crossfader: 0, masterGain: 1 },
+      mixer: { crossfader: 0, masterGain: 1, build: 0, dropPending: false, dropAtMs: null, dropQuantized: false, drops: 0 },
     };
 
     for (const id of DECK_IDS) {
@@ -58,6 +102,14 @@ export class AudioEngine {
   /** Browsers start AudioContexts suspended; call from a user gesture (click/keydown). */
   async resume(): Promise<void> {
     if (this.ctx.state !== 'running') await this.ctx.resume();
+    if (!this.riserSource) {
+      const riser = this.ctx.createBufferSource();
+      riser.buffer = this.noise;
+      riser.loop = true;
+      riser.connect(this.riserBand);
+      riser.start();
+      this.riserSource = riser;
+    }
   }
 
   subscribe(listener: Listener): () => void {
@@ -155,8 +207,61 @@ export class AudioEngine {
         this.channels[cmd.deck].setRate(rate);
         break;
       }
-      case 'SET_BPM':
-        this.state.decks[cmd.deck].bpm = cmd.bpm;
+      case 'SET_BPM': {
+        const deck = this.state.decks[cmd.deck];
+        deck.bpm = cmd.bpm;
+        deck.bpmSource = cmd.bpm === null ? null : 'manual';
+        this.applyGrid(cmd.deck);
+        break;
+      }
+      case 'SET_CHANNEL_FILTER': {
+        const value = clamp(cmd.value, -1, 1);
+        this.state.decks[cmd.deck].channelFilter[cmd.channel] = value;
+        this.channels[cmd.deck].setChannelFilter(cmd.channel, value);
+        break;
+      }
+      case 'SET_LOOP_BEATS':
+        this.loopBeats(cmd.deck, cmd.beats);
+        break;
+      case 'CREATE_CLIP':
+        this.createClip(cmd.deck, cmd.channel, cmd.clipId, cmd.beats);
+        break;
+      case 'REMOVE_CLIP':
+        this.removeClip(cmd.deck, cmd.clipId);
+        return;
+      case 'SET_CLIP_GAIN': {
+        const clip = this.state.decks[cmd.deck].clips[cmd.clipId];
+        if (!clip) return;
+        clip.gain = clamp(cmd.gain, 0, 1);
+        this.channels[cmd.deck].setClipGain(cmd.clipId, clip.gain);
+        break;
+      }
+      case 'SET_CLIP_MUTE': {
+        const clip = this.state.decks[cmd.deck].clips[cmd.clipId];
+        if (!clip) return;
+        clip.muted = cmd.muted;
+        this.channels[cmd.deck].setClipMute(cmd.clipId, cmd.muted);
+        break;
+      }
+      case 'SET_CLIP_FILTER': {
+        const clip = this.state.decks[cmd.deck].clips[cmd.clipId];
+        if (!clip) return;
+        clip.filter = clamp(cmd.value, -1, 1);
+        this.channels[cmd.deck].setClipFilter(cmd.clipId, clip.filter);
+        break;
+      }
+      case 'SET_BUILD': {
+        const mixer = this.state.mixer;
+        if (mixer.dropPending) return;
+        const v = clamp(cmd.value, 0, 1);
+        // Rise quickly, fall back gently (cancelling shouldn't lurch).
+        const tc = v >= mixer.build ? 0.06 : 0.25;
+        mixer.build = v;
+        this.applyBuild(v, this.ctx.currentTime, tc);
+        break;
+      }
+      case 'DROP':
+        this.drop();
         break;
       case 'SET_CROSSFADER':
         this.state.mixer.crossfader = clamp(cmd.value, -1, 1);
@@ -201,9 +306,23 @@ export class AudioEngine {
         if (seq !== this.loadSeq[id]) return;
         channel.setBuffers(loaded.buffers);
         deck.bpm = loaded.manifest.bpm;
+        deck.firstBeatSec = loaded.manifest.firstBeatSec ?? 0;
+        deck.bpmSource = 'manifest';
       } else if (cmd.track.audioUrl) {
         await channel.loadFullMix(cmd.track.audioUrl, abort.signal);
         if (seq !== this.loadSeq[id]) return;
+        if (deck.bpm === null) {
+          // Library files have no BPM: estimate it so loops, clips and drops can follow the beat.
+          const buffer = channel.bufferFor('full');
+          const est = buffer ? estimateTempo(channelData(buffer), buffer.sampleRate) : null;
+          if (est) {
+            deck.bpm = est.bpm;
+            deck.firstBeatSec = est.firstBeatSec;
+            deck.bpmSource = 'estimated';
+          }
+        } else {
+          deck.bpmSource = 'manual';
+        }
       } else {
         throw new Error('Track has no audio source');
       }
@@ -221,6 +340,7 @@ export class AudioEngine {
       if (seq === this.loadSeq[id]) this.loadAbort[id] = null;
     }
 
+    this.applyGrid(id);
     this.applyDeckControls(id);
     this.stampPosition(id, 0);
     this.emit();
@@ -259,6 +379,163 @@ export class AudioEngine {
     ch.setEcho(d.echo);
     ch.setRate(d.playbackRate);
     for (const stem of STEM_IDS) this.applyStem(id, stem);
+    for (const key of [...STEM_IDS, 'full'] as ChannelKey[]) ch.setChannelFilter(key, d.channelFilter[key] ?? 0);
+  }
+
+  // --- Spatial workstation additions: grid, loops, clips, build/drop -------
+
+  /** Live waveform data for a channel of a deck. */
+  getEnvelope(deck: DeckId, channel: ChannelKey): { data: Float32Array; rate: number; duration: number } | null {
+    return this.channels[deck].envelope(channel);
+  }
+
+  /** Live output level of a channel (stem or full mix), 0..1. */
+  getChannelLevel(deck: DeckId, channel: ChannelKey): number {
+    return this.state.decks[deck].playing ? this.channels[deck].channelLevel(channel) : 0;
+  }
+
+  getClipLevel(deck: DeckId, clipId: string): number {
+    return this.state.decks[deck].playing ? this.channels[deck].clipLevel(clipId) : 0;
+  }
+
+  /** Track position a clip is playing right now. */
+  getClipPositionSec(deck: DeckId, clipId: string): number {
+    return this.channels[deck].clipPosition(clipId);
+  }
+
+  private applyGrid(id: DeckId): void {
+    const d = this.state.decks[id];
+    this.channels[id].grid = d.bpm ? { bpm: d.bpm, firstBeatSec: d.firstBeatSec } : null;
+  }
+
+  /** Beat-snapped loop from the current beat (playback continues seamlessly inside it). */
+  private loopBeats(id: DeckId, beats: number | null): void {
+    const deck = this.state.decks[id];
+    const ch = this.channels[id];
+    if (beats === null) {
+      deck.loop = null;
+      ch.setLoop(null);
+      return;
+    }
+    const start = ch.currentBeatPosition();
+    const beat = ch.beatSec;
+    if (start === null || !beat || deck.status !== 'ready') return;
+    const startSec = clamp(start, 0, deck.durationSec);
+    const endSec = clamp(start + beats * beat, 0, deck.durationSec);
+    if (endSec - startSec < 0.05) return;
+    deck.loop = { startSec, endSec, beats };
+    ch.setLoop(deck.loop);
+  }
+
+  private createClip(id: DeckId, channel: ChannelKey, clipId: string, beats: number): void {
+    const deck = this.state.decks[id];
+    if (deck.clips[clipId]) return;
+    const made = this.channels[id].createClip(clipId, channel, beats);
+    if (!made) return;
+    deck.clips[clipId] = { channel, beats, startSec: made.startSec, endSec: made.endSec, gain: 1, muted: false, filter: 0, engaged: false };
+    setTimeout(() => {
+      const clip = this.state.decks[id].clips[clipId];
+      if (!clip) return;
+      clip.engaged = true;
+      this.emit();
+    }, Math.max(0, (made.at - this.ctx.currentTime) * 1000));
+  }
+
+  private removeClip(id: DeckId, clipId: string): void {
+    if (!this.state.decks[id].clips[clipId]) return;
+    const at = this.channels[id].removeClip(clipId);
+    setTimeout(() => {
+      delete this.state.decks[id].clips[clipId];
+      this.emit();
+    }, Math.max(0, (at - this.ctx.currentTime) * 1000));
+  }
+
+  /** Master build: high-pass sweep, stem ducking, echo wash, noise riser. */
+  private applyBuild(v: number, at: number, tc: number): void {
+    const shaped = v ** 1.6;
+    this.buildHpf.frequency.setTargetAtTime(BUILD_HPF.min * (BUILD_HPF.max / BUILD_HPF.min) ** shaped, at, tc);
+    this.buildHpf.Q.setTargetAtTime(0.7 + 5 * shaped, at, tc);
+    this.buildSend.gain.setTargetAtTime(0.45 * v, at, tc);
+    this.riserGain.gain.setTargetAtTime(0.12 * v * v, at, tc);
+    this.riserBand.frequency.setTargetAtTime(300 * (9000 / 300) ** v, at, tc);
+    for (const deck of DECK_IDS) {
+      for (const key of [...STEM_IDS, 'full'] as ChannelKey[]) {
+        this.channels[deck].setChannelPerf(key, 1 - (BUILD_DUCK[key] ?? 0) * v, at, tc);
+      }
+    }
+  }
+
+  /** The deck drops are timed to: the playing deck with a BPM that the crossfader favours. */
+  private leadDeck(): DeckId | null {
+    const order: DeckId[] = this.state.mixer.crossfader <= 0 ? ['A', 'B'] : ['B', 'A'];
+    return order.find((d) => this.state.decks[d].playing && this.channels[d].grid) ?? null;
+  }
+
+  private drop(): void {
+    const mixer = this.state.mixer;
+    if (mixer.dropPending || mixer.build < 0.05) return;
+    const now = this.ctx.currentTime;
+    const lead = this.leadDeck();
+    let T = now + LEAD;
+    if (lead) {
+      const ch = this.channels[lead];
+      const grid = ch.grid!;
+      const bar = (60 / grid.bpm) * BEATS_PER_BAR;
+      const from = ch.position() + LEAD * this.state.decks[lead].playbackRate;
+      const b = grid.firstBeatSec + Math.ceil((from - grid.firstBeatSec) / bar - 1e-9) * bar;
+      T = Math.max(now + LEAD, ch.ctxTimeAt(b));
+      this.buildDelay.delayTime.setTargetAtTime((60 / grid.bpm) * 0.75, now, 0.05);
+    }
+    const peak = mixer.build;
+    // Keep the tension climbing into the drop.
+    this.applyBuild(Math.min(1, peak + 0.15), now, Math.max(0.02, (T - now) / 3));
+    this.buildHpf.frequency.setTargetAtTime(BUILD_HPF.min, T, 0.012);
+    this.buildHpf.Q.setTargetAtTime(0.7, T, 0.02);
+    this.riserGain.gain.setTargetAtTime(0, T, 0.01);
+    this.buildSend.gain.setTargetAtTime(0, T, 0.35);
+    for (const deck of DECK_IDS) {
+      for (const key of [...STEM_IDS, 'full'] as ChannelKey[]) this.channels[deck].setChannelPerf(key, 1, T, 0.008);
+    }
+    this.impact(T, peak);
+    mixer.dropPending = true;
+    mixer.dropQuantized = lead !== null;
+    mixer.dropAtMs = Date.now() + (T - now + (this.ctx.outputLatency || this.ctx.baseLatency || 0)) * 1000;
+    if (this.dropTimer) clearTimeout(this.dropTimer);
+    this.dropTimer = setTimeout(() => {
+      mixer.dropPending = false;
+      mixer.build = 0;
+      mixer.drops++;
+      this.dropTimer = null;
+      this.emit();
+    }, Math.max(0, (T - now) * 1000));
+  }
+
+  /** Sub boom + noise crash on the drop. */
+  private impact(T: number, strength: number): void {
+    const ctx = this.ctx;
+    const level = 0.35 + 0.35 * strength;
+    const sub = ctx.createOscillator();
+    sub.frequency.setValueAtTime(95, T);
+    sub.frequency.exponentialRampToValueAtTime(38, T + 0.45);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.0001, T);
+    subGain.gain.exponentialRampToValueAtTime(level, T + 0.008);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, T + 1.2);
+    sub.connect(subGain).connect(this.master);
+    sub.start(T);
+    sub.stop(T + 1.3);
+    const crash = ctx.createBufferSource();
+    crash.buffer = this.noise;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2500;
+    const crashGain = ctx.createGain();
+    crashGain.gain.setValueAtTime(0.0001, T);
+    crashGain.gain.exponentialRampToValueAtTime(0.1 * level, T + 0.005);
+    crashGain.gain.exponentialRampToValueAtTime(0.0001, T + 1.4);
+    crash.connect(hp).connect(crashGain).connect(this.master);
+    crash.start(T);
+    crash.stop(T + 1.5);
   }
 
   private applyStem(id: DeckId, stem: StemId): void {
@@ -311,7 +588,22 @@ function emptyDeck(id: DeckId): DeckState {
     filter: 0,
     echo: 0,
     loop: null,
+    firstBeatSec: 0,
+    bpmSource: null,
+    channelFilter: {},
+    clips: {},
   };
+}
+
+function channelData(buffer: AudioBuffer): Float32Array[] {
+  return Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+}
+
+function noiseBuffer(ctx: BaseAudioContext, seconds: number): AudioBuffer {
+  const b = ctx.createBuffer(1, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return b;
 }
 
 function isAbort(err: unknown): boolean {

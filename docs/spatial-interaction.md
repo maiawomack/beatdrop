@@ -152,41 +152,53 @@ All of it uses `setTargetAtTime` automation, so there are no clicks.
 - the echo tails out
 - a sub boom and noise crash play
 
-## Audio contract (`src/audio/AudioCommands.ts`): needs Task 1 sign-off
+## Driving the real songs: the Task 1 engine
 
-The spatial side only talks to audio through `AudioCommandSink` and `AudioStateSource`. These are the additions, and the Task 1 engine needs to implement them (the stand-in `src/audio/WebAudioEngine.ts` is a working reference):
+The spatial page (`/spatial.html`, entry `src/spatial/main.ts`) hosts the shared two-deck engine (`src/audio/AudioEngine.ts`, Task 1). Every gesture changes the songs playing on it.
+
+- **Loading songs:** `/` opens the song search (the library in `mp3/`). Enter loads deck A and Shift+Enter loads deck B. A song you load starts playing by itself if nothing else is.
+- **Holograms per deck:** deck A's channels sit in the left column and deck B's in the right, in two colour families. A separated track shows one hologram per stem (Vocals, Drums, Bass, Music). A full mix (every library song until it's run through stem separation) shows one hologram, labelled with the song title.
+- **Adapter:** `src/bridge/task1Adapter.ts` translates spatial commands into engine commands, and engine state back into the spatial view (ids `A:vocals`, `A:full`, clips `A:full~1`).
+
+| Spatial gesture | Engine command | Scope |
+| --- | --- | --- |
+| Volume (blend/isolate) | `SET_STEM_GAIN` · full mix: `SET_DECK_GAIN` · clip: `SET_CLIP_GAIN` | stem / deck / clip |
+| Tap = mute | `SET_STEM_MUTE` · full mix: deck gain 0 and restore · clip: `SET_CLIP_MUTE` | stem / deck / clip |
+| Filter cap, twist | `SET_CHANNEL_FILTER` · clip: `SET_CLIP_FILTER` | per channel (new) |
+| Stretch | `SET_ECHO` | **whole deck** |
+| Loop cap | `SET_LOOP_BEATS` | **whole deck** (the engine loops decks) |
+| Pull out / return a clip | `CREATE_CLIP` / `REMOVE_CLIP` | per channel (new) |
+| Lift / drop | `SET_BUILD` / `DROP` | master (new) |
+| Solo, pan | not supported by the engine | — |
+
+### Engine additions (`src/shared/types.ts`, `AudioEngine.ts`, `DeckChannel.ts`)
+
+These are additive: existing commands and state behave exactly as before. **Siyona (Task 1) should review them.**
 
 - **Commands:**
-  - `setFilter {stemId, value -1..1}`
-  - `setLoop {stemId, beats: 1|2|4|8|null}`
-  - `setBuild {value 0..1}`
-  - `drop {}`
-  - `createClip {stemId, clipId, beats}` / `removeClip {stemId: clipId}`: loop clips are extra voices that loop a region of their source's buffer. They show up in `stems` with `clipOf` set and accept every stem command. Monitor 1 should expect stems to appear and disappear.
+  - `SET_CHANNEL_FILTER`, `SET_LOOP_BEATS`
+  - `CREATE_CLIP` / `REMOVE_CLIP` / `SET_CLIP_GAIN` / `SET_CLIP_MUTE` / `SET_CLIP_FILTER`
+  - `SET_BUILD` / `DROP`
+- **State:**
+  - `DeckState` gains `firstBeatSec`, `bpmSource`, `channelFilter` and `clips`. `LoopState` gains an optional `beats`.
+  - `MixerState` gains `build`, `dropPending`, `dropAtMs`, `dropQuantized` and `drops`.
+- **Graph:**
+  - Each channel gets a "lane" between its stem gain and the deck input: a filter pair, a duck for clips, a build-duck gain, and a level meter.
+  - Clips are extra buffer sources. They stay phase-locked to the deck through play, pause, seek and rate changes.
+  - The master runs through a build high-pass, plus an echo wash and a noise riser.
+- **Getters:** `getEnvelope`, `getChannelLevel`, `getClipLevel` and `getClipPositionSec`, for the holograms.
+- **Tempo:** a library song loaded as a full mix has no BPM, so the engine estimates BPM and beat phase on load (`src/audio/tempo.ts`, about 0.2 s). It found 128 for "Summer" and 87 for "Rude Boy". Bars are counted from the first detected beat; downbeats aren't detected. The status bar marks estimated BPMs with `~`. With no BPM, loops and clips are refused and drops fire immediately ("NO BEAT GRID").
 
-  Build and drop have no `stemId`: they target the master bus.
-- **`StemState`** gains `filter`, `loop: {beats, startSec, endSec, engaged} | null`, `clipOf` and `ducked`.
-- **`AudioStateSource`** gains:
-  - `perf: {build, dropPending, dropAtMs, dropQuantized, drops}`
-  - `transport: {playing, bpm, beatsPerBar, anchorMs, durationSec}`
-- **`subscribe(listener)`:** the listener now takes no arguments. Read `stems`, `perf` and `transport` from the source.
-- **Times** (`anchorMs`, `dropAtMs`) are wall-clock ms (`performance.timeOrigin + performance.now()`), so they mean the same instant in every window. `beatAt(transport)` gives the current beat anywhere.
-- **Tempo:**
-  - Demo song: 120 BPM.
-  - Flat stem files in `/stems/`: the engine reads `bpm` and `firstBeatSec` from an optional `/stems/manifest.json` (the same fields as the Task 5 `TrackManifest`).
-  - **No tempo:** loops are refused, and drops fire immediately. The label then says "NO BEAT GRID", so the app never pretends to be beat-synced.
-- **One deck for now.** When the two-deck engine lands, we need to agree on a `deckId` for stem commands. Build/drop could then target a deck or the master.
+### Monitor 1
 
-## Cross-window sync (`src/integration/broadcastSync.ts`)
+The decks page (`/`, Task 3) still creates its own stand-in engine (`src/engine/standInEngine.ts`, on the Task 3 contract in `src/shared/contracts.ts`). It is **not yet connected** to the engine in the spatial window. Until it is, open only one of the two pages with audio, or you'll hear two engines.
 
-- **Host:** exactly one window hosts the engine (`hostAudioEngine`). Today that's the spatial window. It applies commands from other windows and broadcasts `{stems, perf, transport}` snapshots at up to 30 Hz, plus a 2 s heartbeat.
-- **Clients:** other windows call `connectToAudioHost()`. They get the same `dispatch` / `stems` / `perf` / `transport` / `subscribe` interface as a local engine, and they never play audio.
-- **Duplicate hosts:** if a second window also hosts, both hosts get `onConflict`. The spatial window then shows "⚠ ANOTHER WINDOW IS ALSO PLAYING AUDIO" in its status bar.
-- **Monitor 1 doesn't exist in this repo yet.** The sync tests use a mock engine to stand in for both sides.
-- **For Monitor 1 to show spatial changes**, it needs to:
-  - render `stems[*].filter`
-  - render `stems[*].loop` (with `engaged`)
-  - render `perf.build` / `perf.dropPending`
-  - flash on `perf.drops` changing
+Connecting them needs three things:
+1. One host window for `AudioEngine`.
+2. A BroadcastChannel client.
+3. Agreement between Tasks 1 and 3 on a single contract: `shared/types.ts` vs `shared/contracts.ts`.
+
+`src/integration/broadcastSync.ts` is the earlier proposal on the spatial contract and is not used by the page right now.
 
 ## Tests
 
@@ -211,7 +223,7 @@ Replay a debug recording through the current controller:
 
 ### Manual test (spatial monitor)
 
-1. `npm run dev`, open the page, allow the camera, then click **START SESSION**.
+1. `npm run dev`, open `http://127.0.0.1:5173/spatial.html`, allow the camera, click **START SESSION**, then pick a song (Enter → deck A) and press Space if it isn't playing.
 2. **Loop:** fist on the ◯ cap left of DRUMS. Raise your hand two steps until the cap shows "2", then open it.
    - Within a beat, the drums repeat a half-second phrase.
    - The waveform shows repeating loop marks.

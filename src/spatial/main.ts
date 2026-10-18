@@ -1,18 +1,21 @@
 /// <reference types="vite/client" />
 import { syncClips } from '../ar/clips';
+import { deckPositions, syncDeckStems } from '../ar/decks';
 import { DriftField } from '../ar/DriftField';
-import { createHoloObject, stemView, type HoloObject } from '../ar/HoloObject';
+import { stemView, type HoloObject } from '../ar/HoloObject';
 import { InteractionController } from '../ar/InteractionController';
 import { NeonScene } from '../ar/NeonScene';
-import { DEFAULT_STEMS, defaultPositions, defaultStemLayout } from '../ar/layout';
 import { WaveformRenderer } from '../ar/WaveformRenderer';
 import { beatAt, wallNow, type AudioStateSource } from '../audio/AudioCommands';
-import { WebAudioEngine } from '../audio/WebAudioEngine';
-import { createEngineWaveforms } from '../bridge/engineWaveforms';
+import { AudioEngine } from '../audio/AudioEngine';
 import { createStemAudioBridge } from '../bridge/stemAudioBridge';
+import { Task1Adapter } from '../bridge/task1Adapter';
+import { createTask1Waveforms } from '../bridge/task1Waveforms';
 import { drawHandOverlay } from '../debug/handOverlay';
 import { InteractionRecorder } from '../debug/recorder';
-import { hostAudioEngine } from '../integration/broadcastSync';
+import { searchLibrary } from '../library/api';
+import { DECK_IDS, type AudioEngineState, type DeckId } from '../shared/types';
+import { createSearchBar } from '../ui/SearchBar';
 import {
   GrabClassifier,
   PerceptionPipeline,
@@ -33,6 +36,7 @@ const hud = document.getElementById('hud') as HTMLDivElement;
 const startButton = document.getElementById('start') as HTMLButtonElement;
 const hint = document.getElementById('hint') as HTMLDivElement;
 const status = document.getElementById('status') as HTMLDivElement;
+const searchBox = document.getElementById('search') as HTMLDivElement;
 const ctx = canvas.getContext('2d')!;
 
 function fitStage(): void {
@@ -70,18 +74,28 @@ function syncFromEngine(objects: HoloObject[], engine: AudioStateSource, interac
   interaction.perfView = { dropPending: engine.perf.dropPending };
 }
 
-/** Compact musical status: tempo, bar.beat with beat lights, transport, source. */
-function statusText(engine: AudioStateSource, source: string): string {
+/** Compact musical status: each deck's song and tempo, plus the lead deck's bar.beat lights. */
+function statusText(engine: AudioStateSource, state: AudioEngineState): string {
+  const decks = DECK_IDS.map((id) => {
+    const d = state.decks[id];
+    if (d.status === 'loading') return `${id} loading…`;
+    if (d.status === 'error') return `${id} ⚠ ${d.error ?? 'error'}`;
+    if (d.status !== 'ready' || !d.track) return `${id} —`;
+    const bpm = d.bpm ? `${Math.round(d.bpm * d.playbackRate)}${d.bpmSource === 'estimated' ? '~' : ''} BPM` : 'no BPM';
+    return `${id} ${d.playing ? '▶' : '❚❚'} ${truncate(d.track.title, 18)} · ${bpm}`;
+  });
   const t = engine.transport;
   const beat = beatAt(t);
-  const bpm = t.bpm === null ? '— BPM' : `${Math.round(t.bpm)} BPM`;
   let pos = '';
   if (beat !== null) {
-    const inBar = Math.floor(beat) % t.beatsPerBar;
-    const bar = (Math.floor(beat / t.beatsPerBar) % 999) + 1;
-    pos = `  ${String(bar).padStart(2, ' ')}.${inBar + 1}  ` + Array.from({ length: t.beatsPerBar }, (_, i) => (i === inBar ? '●' : '○')).join('');
+    const inBar = ((Math.floor(beat) % t.beatsPerBar) + t.beatsPerBar) % t.beatsPerBar;
+    pos = '   ' + Array.from({ length: t.beatsPerBar }, (_, i) => (i === inBar ? '●' : '○')).join('');
   }
-  return `${t.playing ? '▶' : '❚❚'}  ${bpm}${pos}  ·  ${source}`;
+  return decks.join('   ') + pos;
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
 function cameraErrorMessage(err: unknown): string {
@@ -167,29 +181,52 @@ const CALIBRATION: CalibrationStep[] = [
 
 async function main(): Promise<void> {
   hud.textContent = 'Starting camera + loading hand model + preparing audio…';
-  const [pipeline, audio] = await Promise.all([
-    PerceptionPipeline.create(video),
-    WebAudioEngine.create(DEFAULT_STEMS.map((s) => s.id)),
-  ]);
+  // The shared two-deck engine (Task 1). This window owns it; gestures reach it
+  // through the adapter, so every hand interaction changes the actual songs.
+  const engine = new AudioEngine();
+  const audio = new Task1Adapter(engine);
+  const pipeline = await PerceptionPipeline.create(video);
   fitStage();
   window.addEventListener('resize', fitStage);
-
-  // This window owns the audio engine; other windows (DJ monitor) connect over BroadcastChannel.
-  let hostWarning = '';
-  const stopHosting = hostAudioEngine(audio, {
-    onConflict: () => {
-      hostWarning = '  ·  ⚠ ANOTHER WINDOW IS ALSO PLAYING AUDIO';
-      console.warn('[sync] Another window is hosting an audio engine: only one window should (duplicate playback).');
-    },
-  });
   window.addEventListener('pagehide', () => {
-    stopHosting();
+    audio.close();
     pipeline.dispose();
-    void audio.close();
+    void engine.ctx.close();
   });
 
   const aspect0 = video.videoWidth / video.videoHeight;
-  const stems = defaultStemLayout(aspect0).map(createHoloObject);
+  // Holograms appear as songs load (one per stem, or one for a full mix).
+  const stems: HoloObject[] = [];
+  const titleOf = (deck: DeckId) => audio.state.decks[deck].track?.title ?? null;
+
+  // Song search: "/" opens it; Enter loads deck A, Shift+Enter deck B.
+  let autoplay: DeckId | null = null;
+  const search = createSearchBar({
+    search: (q, signal) => searchLibrary(q, signal),
+    onSelect: (track, deck) => {
+      const other = audio.state.decks[deck === 'A' ? 'B' : 'A'];
+      autoplay = other.playing ? null : deck; // start it if nothing else is playing
+      void engine.dispatch({ type: 'LOAD_TRACK', deck, track });
+      closeSearch();
+    },
+    placeholder: 'Search songs…  Enter → deck A · Shift+Enter → deck B',
+    minChars: 0,
+  });
+  searchBox.appendChild(search.element);
+  const openSearch = () => {
+    searchBox.hidden = false;
+    search.focus();
+  };
+  const closeSearch = () => {
+    searchBox.hidden = true;
+    (document.activeElement as HTMLElement | null)?.blur();
+  };
+  audio.subscribe(() => {
+    if (autoplay && audio.state.decks[autoplay].status === 'ready') {
+      void engine.dispatch({ type: 'PLAY', deck: autoplay });
+      autoplay = null;
+    }
+  });
 
   pipeline.gestures.classifier = loadGrabModel();
   let calib: { step: number; stepStart: number } | null = null;
@@ -203,23 +240,47 @@ async function main(): Promise<void> {
     GRAB_GESTURE,
   );
   syncFromEngine(stems, audio, interaction);
-  // Dev only: poke the session from the console (e.g. __beatdrop.audio.dispatch({ type: 'drop' })).
-  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { audio, interaction, stems } });
+  // Dev only: poke the session from the console (e.g. __beatdrop.engine.dispatch({ type: 'DROP' })).
+  if (import.meta.env.DEV) Object.assign(window, { __beatdrop: { engine, audio, interaction, stems } });
   const drift = new DriftField(aspect0, GRAB_GESTURE);
-  const waveSource = createEngineWaveforms(audio);
+  const waveSource = createTask1Waveforms(engine, audio);
   const waveforms = new WaveformRenderer(waveSource);
   const neon = new NeonScene();
 
   // Browsers only allow audio to start from a user gesture.
   startButton.hidden = false;
   startButton.addEventListener('click', () => {
-    void audio.start();
+    void engine.resume();
     startButton.hidden = true;
     hint.hidden = true;
+    if (!DECK_IDS.some((d) => audio.state.decks[d].status !== 'empty')) openSearch();
   });
 
+  const togglePlay = (deck: DeckId) => {
+    if (audio.state.decks[deck].status === 'ready') void engine.dispatch({ type: 'TOGGLE_PLAY', deck });
+  };
+
   window.addEventListener('keydown', (e) => {
+    // Typing in the search box: only Escape is ours.
+    if (e.target instanceof HTMLInputElement) {
+      if (e.key === 'Escape') closeSearch();
+      return;
+    }
     const key = e.key.toLowerCase();
+    if (key === '/') {
+      e.preventDefault();
+      void engine.resume();
+      startButton.hidden = true;
+      hint.hidden = true;
+      openSearch();
+      return;
+    }
+    if (key === 'a' && !e.repeat) togglePlay('A');
+    if (key === 'b' && !e.repeat) togglePlay('B');
+    if (key === 'arrowleft' || key === 'arrowright') {
+      const xf = audio.state.mixer.crossfader + (key === 'arrowleft' ? -0.1 : 0.1);
+      void engine.dispatch({ type: 'SET_CROSSFADER', value: Math.max(-1, Math.min(1, xf)) });
+    }
     if (key === 'h') hud.classList.toggle('hidden');
     if (key === 'c' && !e.repeat) {
       if (e.shiftKey) {
@@ -242,21 +303,24 @@ async function main(): Promise<void> {
       if (key === 'p') recorder.label = 'pinch';
       if (key === 'f') recorder.label = 'fist';
     }
-    if (key === 'r') interaction.resetLayout(defaultPositions(video.videoWidth / video.videoHeight));
+    if (key === 'r') {
+      const ids = stems.filter((o) => !o.clipOf).map((o) => o.id);
+      interaction.resetLayout(deckPositions(video.videoWidth / video.videoHeight, ids));
+    }
     if (key === ' ') {
       e.preventDefault();
       startButton.hidden = true;
       hint.hidden = true;
-      void audio.togglePause();
+      void engine.resume();
+      // Pause everything if anything plays, otherwise play every loaded deck.
+      const ready = DECK_IDS.filter((d) => audio.state.decks[d].status === 'ready');
+      const anyPlaying = ready.some((d) => audio.state.decks[d].playing);
+      for (const deck of ready) void engine.dispatch({ type: anyPlaying ? 'PAUSE' : 'PLAY', deck });
     }
-    // 1/2/3 mute, Shift+1/2/3 solo (e.code so Shift doesn't turn "1" into "!").
-    const digit = /^Digit([1-3])$/.exec(e.code);
+    // 1-9 mute holograms in order (e.code so Shift doesn't turn "1" into "!").
+    const digit = /^Digit([1-9])$/.exec(e.code);
     const obj = digit ? stems[Number(digit[1]) - 1] : undefined;
-    if (obj) {
-      const s = audio.stems.get(obj.id);
-      if (e.shiftKey) audio.dispatch({ type: 'setSolo', stemId: obj.id, value: !s?.solo });
-      else audio.dispatch({ type: 'setMute', stemId: obj.id, value: !s?.muted });
-    }
+    if (obj) audio.dispatch({ type: 'setMute', stemId: obj.id, value: !audio.stems.get(obj.id)?.muted });
   });
 
   window.addEventListener('keyup', (e) => {
@@ -301,7 +365,7 @@ async function main(): Promise<void> {
     waveforms.pulse = neon.pulse;
     waveforms.energy = neon.energy;
     waveforms.impact = neon.impact;
-    const line = statusText(audio, audio.sourceKind === 'files' ? 'STEM FILES' : 'DEMO SONG') + hostWarning;
+    const line = statusText(audio, audio.state);
     if (status.textContent !== line) status.textContent = line;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     neon.drawBackground(ctx);
@@ -315,6 +379,7 @@ async function main(): Promise<void> {
 
   pipeline.onFrame((frame) => {
     const aspect = video.videoWidth / video.videoHeight;
+    syncDeckStems(audio, interaction, aspect, titleOf);
     syncClips(audio, interaction);
     syncFromEngine(stems, audio, interaction);
     interaction.setAspect(aspect);
@@ -367,14 +432,14 @@ async function main(): Promise<void> {
       const mix = s
         ? `vol ${s.volume.toFixed(2)}  fx ${s.fx.toFixed(2)}  filt ${s.filter.toFixed(2)}${s.loop ? `  loop ${s.loop.beats}${s.loop.engaged ? '' : '…'}` : ''}${s.muted ? '  MUTE' : ''}${s.solo ? '  SOLO' : ''}`
         : '';
-      return `${obj.label.padEnd(6)}: ${owner.padEnd(16)}${mix}`;
+      return `${obj.label.padEnd(18)}: ${owner.padEnd(14)}${mix}`;
     });
     const modes = [...interaction.handModes].map(([h, m]) => `${h}: ${m}`).join('   ') || 'no hands';
     const perf = audio.perf;
     const perfLine = `build ${perf.build.toFixed(2)}${perf.dropPending ? '  DROP PENDING' : ''}  drops ${perf.drops}`;
     hud.textContent =
-      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   audio: ${audio.sourceKind === 'files' ? 'stem files' : 'demo song'} ${audio.playing ? '▶' : '❚❚'}\n` +
-      `[space] play  [1-3] mute  [⇧1-3] solo  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record (hold O/P/F to label)  [H] hide\n` +
+      `tracking ${fps.toFixed(0)} fps   grab: ${pipeline.gestures.classifier ? 'calibrated' : 'default (press C)'}   audio: ${engine.ctx.state}\n` +
+      `[/] search  [space] play/pause  [A]/[B] deck  [←/→] crossfader  [1-9] mute  [R] reset layout  [C] calibrate grab  [⇧C] clear  [D] record  [H] hide\n` +
       `modes  ${modes}\n${perfLine}\n` +
       `Left : ${describe(byId('Left'))}\n` +
       `Right: ${describe(byId('Right'))}\n` +

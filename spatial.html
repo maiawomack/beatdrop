@@ -42,6 +42,8 @@
                backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
       #start:hover { box-shadow: 0 0 36px rgba(80, 180, 255, .6), inset 0 0 16px rgba(80, 180, 255, .25); }
       #start[hidden] { display: none; }
+      #search { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(560px, 90%); }
+      #search[hidden] { display: none; }
     </style>
   </head>
   <body>
@@ -51,9 +53,10 @@
       <canvas id="overlay"></canvas>
       <div id="brand">BEATDROP <span>// SPATIAL MIX</span></div>
       <div id="status"></div>
-      <div id="hint">FIST = GRAB · TAP = MUTE · TWO FISTS ON ONE STEM = STRETCH FX · ONE STEM PER HAND = PULL APART TO ISOLATE<br>
-        ◯ LEFT CAP = LOOP (RAISE = LONGER, DRAG OUT = FLOATING CLIP) · ◐ RIGHT CAP or TWIST A HELD STEM = FILTER · FINGERTIPS TOGETHER, POINTING DOWN = LIFT TO BUILD, LET GO TO DROP<br>
-        SPACE PLAY · R RESET · C CALIBRATE GRIP · H DEBUG</div>
+      <div id="search" hidden></div>
+      <div id="hint">/ SEARCH SONGS (ENTER = DECK A · SHIFT+ENTER = DECK B) · SPACE PLAY · A/B DECK · ←/→ CROSSFADE<br>
+        FIST = GRAB · TAP = MUTE · TWIST = FILTER · TWO FISTS ON ONE = STRETCH ECHO · ONE PER HAND = PULL APART TO ISOLATE<br>
+        ◯ LEFT CAP = LOOP (RAISE = LONGER, DRAG OUT = FLOATING CLIP) · FINGERTIPS DOWN = LIFT TO BUILD, LET GO TO DROP</div>
       <button id="start" hidden>▶ START SESSION</button>
       <div id="hud" class="hidden">Starting camera…</div>
     </div>
