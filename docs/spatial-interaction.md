@@ -102,6 +102,29 @@ Press `C` to teach the app your own grab poses: about 5 s of open/relaxed hands,
 - **Model:** a k-nearest-neighbour classifier (`src/perception/grabClassifier.ts`) on rotation- and mirror-invariant joint-distance features. It then decides grabs.
 - **Storage:** the model is saved in localStorage. `Shift+C` clears it.
 
+#### Perceptron check (optional)
+
+Samples are labeled by the on-screen prompt, so frames where the hand was still closing,
+half-open or out of view would be learned with the wrong label. With the check on, the page
+takes a small snapshot about twice a second during each step. When calibration ends,
+Perceptron (`perceptron-mk1.5`) names the pose in each snapshot, and hand samples recorded
+near a snapshot that doesn't show the requested pose are dropped before training.
+
+- **What Perceptron decides:** only the pose name per snapshot, as validated JSON. Which poses
+  count for each step, and the model itself, stay local: thresholds still come from MediaPipe.
+- **Consent:** the first time you press `C` with Perceptron set up, you're asked once (`Y`/`N`).
+  `N` keeps calibration on this computer. `Shift+C` resets the answer.
+- **Privacy:** snapshots (384 px JPEGs, not video) are kept in memory only until the check finishes.
+  The API key never reaches the browser.
+- **Fallback:** no key, service offline, slow or bad answer → trains on every sample, as before.
+  Live performance never calls Perceptron.
+- **Setup:** `pip install "perceptron>=0.4.0"` (in `tools/stems/requirements.txt`), put
+  `PERCEPTRON_API_KEY=...` in `.env.local` at the repo root (git-ignored), and run
+  `tools/stems/separation_server.py`, which serves `POST /gesture/assess`
+  ([`tools/perceptron/gesture_check.py`](../tools/perceptron/gesture_check.py)).
+- **Code:** `src/spatial/perceptronCalibration.ts` (snapshots, consent, sample matching; tested in
+  `perceptronCalibration.test.ts`). The browser console logs what Perceptron saw.
+
 ### Keyboard
 
 | Key | Action |

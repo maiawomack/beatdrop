@@ -11,7 +11,10 @@ on 127.0.0.1 only and handles one separation at a time (Demucs uses every CPU co
     GET  /jobs/<id>      -> job
     GET  /tracks         -> index.json of every prepared track
     GET  /stems/<path>   -> prepared files (<track-id>/manifest.json, waveform.json, lyrics.json, *.wav)
-    GET  /health         -> {"ok": true, "demucs": bool, "queued": int}
+    GET  /health         -> {"ok": true, "demucs": bool, "queued": int, "perceptron": bool}
+    POST /gesture/assess  {"step": "open"|"fist", "frames": [base64 JPEG, ...]}
+         -> {"results": [{"pose", "keep"}, ...]}  or 503 {"error"} when Perceptron is unavailable
+         (gesture calibration check; see tools/perceptron/gesture_check.py)
 
     job = {"id", "trackId", "state": queued|decoding|separating|analyzing|done|error,
            "progress": 0..1, "manifestUrl": "/stems/<id>/manifest.json" | null, "error": str | null}
@@ -26,7 +29,9 @@ Run with the pipeline venv (Demucs itself runs from .venv-demucs):
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import sys
 import json
 import queue
 import re
@@ -42,6 +47,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import prepare_stems as ps
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "perceptron"))
+import gesture_check  # noqa: E402  (Perceptron calibration check, optional)
 
 DEFAULT_PORT = 8765
 DEFAULT_MAX_UPLOAD_MB = 300
@@ -154,7 +162,8 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
         def do_GET(self) -> None:
             path = urlsplit(self.path).path
             if path == "/health":
-                self._json({"ok": True, "demucs": demucs_ok, "queued": separator.queue.qsize()})
+                self._json({"ok": True, "demucs": demucs_ok, "queued": separator.queue.qsize(),
+                            "perceptron": gesture_check.available()})
             elif path == "/tracks":
                 if (out_root / "index.json").exists():
                     self._file(out_root / "index.json")
@@ -170,12 +179,15 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
 
         def do_POST(self) -> None:
             url = urlsplit(self.path)
-            if url.path != "/separate":
+            if url.path not in ("/separate", "/gesture/assess"):
                 self._error(HTTPStatus.NOT_FOUND, "not found")
                 return
             if not self._origin_allowed():
                 # CORS alone only hides the response; a foreign page could still start jobs.
                 self._error(HTTPStatus.FORBIDDEN, "origin not allowed")
+                return
+            if url.path == "/gesture/assess":
+                self._gesture_assess()
                 return
             try:
                 params = self._separate_params(parse_qs(url.query))
@@ -218,6 +230,27 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
             else:
                 print(f"[{job['id']}] queued {params['title'] or params['fallback_title']!r}")
             self._json(job, HTTPStatus.ACCEPTED if job["state"] != "done" else HTTPStatus.OK)
+
+        def _gesture_assess(self) -> None:
+            """Ask Perceptron which calibration snapshots show the requested pose.
+            Snapshots stay in memory for this request only."""
+            length = int(self.headers.get("Content-Length") or 0)
+            if not 0 < length <= 16_000_000:
+                self._error(HTTPStatus.BAD_REQUEST, "send a JSON body under 16 MB")
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+                frames = [base64.b64decode(f.split(",", 1)[-1], validate=True) for f in body["frames"]]
+                results = gesture_check.assess(str(body["step"]), frames)
+            except gesture_check.GestureCheckUnavailable as exc:
+                self._json({"error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            except (ValueError, KeyError, TypeError) as exc:
+                self._error(HTTPStatus.BAD_REQUEST, f"bad request: {exc}")
+                return
+            kept = sum(r["keep"] for r in results)
+            print(f"gesture check ({body['step']}): kept {kept}/{len(results)}  {[r['pose'] for r in results]}")
+            self._json({"results": results})
 
         # ------------------------------------------------------------ helpers
 

@@ -202,7 +202,8 @@ export class GestureProcessor {
   classifier: GrabClassifier | null = null;
   /** While calibrating: every tracked hand's features are recorded with this label. */
   private collecting: GrabLabel | null = null;
-  private samples: { features: number[]; label: GrabLabel }[] = [];
+  /** Calibration samples; `t` is the frame timestamp, so they can be matched to webcam snapshots. */
+  private samples: { features: number[]; label: GrabLabel; t: number }[] = [];
 
   /** Start recording calibration samples for one label (null stops). */
   collect(label: GrabLabel | null): void {
@@ -216,9 +217,12 @@ export class GestureProcessor {
     return { open, grab: this.samples.length - open };
   }
 
-  /** Train the classifier from the recorded samples and clear them. */
-  finishCalibration(): GrabClassifier {
-    const c = GrabClassifier.train(this.samples);
+  /**
+   * Train the classifier from the recorded samples and clear them. `keep` can drop
+   * samples first, e.g. ones taken while the hand wasn't actually in the requested pose.
+   */
+  finishCalibration(keep?: (sample: { label: GrabLabel; t: number }) => boolean): GrabClassifier {
+    const c = GrabClassifier.train(keep ? this.samples.filter(keep) : this.samples);
     this.samples = [];
     this.collecting = null;
     if (c.ready) this.classifier = c;
@@ -349,7 +353,7 @@ export class GestureProcessor {
     track.anchor.update(mean(lms, ANCHOR_POINTS), t);
 
     const features = handFeatures(world);
-    if (features && this.collecting !== null) this.samples.push({ features, label: this.collecting });
+    if (features && this.collecting !== null) this.samples.push({ features, label: this.collecting, t });
     const learnedScore = features && this.classifier?.ready ? this.classifier.score(features) : 0;
     const learnedPhase = track.learned.update(spreadOpen ? 1 : 1 - learnedScore, pinchPoint, t);
 
