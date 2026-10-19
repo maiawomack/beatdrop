@@ -57,6 +57,9 @@ DEFAULT_MAX_UPLOAD_MB = 300
 STAGE_SPAN = {"queued": (0.0, 0.0), "decoding": (0.0, 0.05), "separating": (0.05, 0.9),
               "analyzing": (0.9, 1.0), "done": (1.0, 1.0)}
 LOCAL_ORIGIN = re.compile(r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$")
+#: The team's deployed app. It can't run Demucs itself, so it uses the service on the
+#: viewer's own machine (this one), like the local app does. More with --allow-origin.
+DEPLOYED_ORIGINS = {"https://beatdrop-web.onrender.com"}
 CONTENT_TYPES = {".json": "application/json", ".wav": "audio/wav", ".flac": "audio/flac", ".mp3": "audio/mpeg",
                  ".jpg": "image/jpeg", ".png": "image/png"}
 AUDIO_SUFFIXES = {".wav", ".flac", ".mp3", ".ogg", ".oga", ".m4a", ".aac", ".mp4", ".aif", ".aiff", ".caf"}
@@ -154,6 +157,10 @@ def make_handler(separator: Separator, out_root: Path, max_upload: int, extra_or
         def do_OPTIONS(self) -> None:  # CORS preflight (uploads send audio/* content types)
             self.send_response(HTTPStatus.NO_CONTENT)
             self._cors()
+            # Chrome's local network check: a public page (the deployed app) calling this
+            # machine asks first; say yes for the origins we already allow.
+            if self.headers.get("Access-Control-Request-Private-Network") == "true" and self._origin_allowed():
+                self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Max-Age", "600")
@@ -366,7 +373,7 @@ def main() -> None:
     settings = {"model": args.model, "device": args.device, "demucs_python": args.demucs_python,
                 "fmt": args.format, "sample_rate": args.sample_rate}
     separator = Separator(out_root, settings)
-    handler = make_handler(separator, out_root, args.max_upload_mb * 1_000_000, set(args.allow_origin), demucs_ok,
+    handler = make_handler(separator, out_root, args.max_upload_mb * 1_000_000, DEPLOYED_ORIGINS | set(args.allow_origin), demucs_ok,
                            args.library.resolve())
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"BeatDrop stem separation on http://{args.host}:{args.port}  (stems in {out_root})")

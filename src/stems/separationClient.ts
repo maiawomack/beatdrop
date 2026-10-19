@@ -7,7 +7,22 @@
 import { loadTrack } from './loadTrack';
 import type { LoadedTrack } from './types';
 
-export const DEFAULT_SEPARATION_SERVER = 'http://127.0.0.1:8765';
+/** The service on this computer (tools/stems/separation_server.py). */
+const LOCAL_SEPARATION_SERVER = 'http://127.0.0.1:8765';
+/** The Python service; set VITE_SERVICE_URL at build time when it runs elsewhere (deployed). */
+export const DEFAULT_SEPARATION_SERVER = import.meta.env.VITE_SERVICE_URL || LOCAL_SEPARATION_SERVER;
+/**
+ * Where to split, in order: the configured service, then the one on this computer. A hosted
+ * service may run without Demucs (it needs ~2 GB of memory); then the deployed site uses the
+ * viewer's own separator if it's running (Chrome asks once to allow access to this device).
+ */
+const SEPARATION_SERVERS = [...new Set([DEFAULT_SEPARATION_SERVER, LOCAL_SEPARATION_SERVER])];
+
+/** The first separation server that can split (has Demucs), or null if none is up. */
+export async function findSeparationServer(): Promise<string | null> {
+  for (const url of SEPARATION_SERVERS) if (await isSeparationServerReady(url)) return url;
+  return null;
+}
 
 export type SeparationState = 'queued' | 'decoding' | 'separating' | 'analyzing' | 'done' | 'error';
 
@@ -47,7 +62,8 @@ export class SeparationError extends Error {
 
 /** Uploads `file`, waits for separation, and returns the absolute manifest URL. */
 export async function separateAudio(file: Blob, options: SeparateOptions = {}): Promise<string> {
-  const { serverUrl = DEFAULT_SEPARATION_SERVER, signal, onProgress, pollIntervalMs = 500 } = options;
+  const { signal, onProgress, pollIntervalMs = 500 } = options;
+  const serverUrl = options.serverUrl ?? (await findSeparationServer()) ?? DEFAULT_SEPARATION_SERVER;
   signal?.throwIfAborted();
 
   const url = new URL('/separate', serverUrl);

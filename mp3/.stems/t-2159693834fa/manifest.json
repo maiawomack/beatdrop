@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-2159693834fa",
+  "title": "LoveGame",
+  "artist": "Lady Gaga",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9640961,
+  "durationSec": 218.6159,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 218.6159,
+  "bpm": 105.01,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.4586,
+  "gainDb": -1.86,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.79,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -1.95,
+      "rmsDb": -22.24
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -1.95,
+      "rmsDb": -19.61
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.38,
+      "rmsDb": -19.86
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -7.1,
+      "rmsDb": -25.32
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

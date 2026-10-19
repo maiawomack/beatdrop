@@ -3,7 +3,7 @@ import type { TrackInfo } from '../shared/types';
 import {
   fetchLyrics,
   fetchWaveform,
-  isSeparationServerReady,
+  findSeparationServer,
   type TrackLyrics,
   type TrackManifest,
   type TrackWaveform,
@@ -109,7 +109,7 @@ export function useSeparationServer(intervalMs = 10_000): boolean | null {
   const [ready, setReady] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;
-    const check = () => isSeparationServerReady().then((ok) => alive && setReady(ok));
+    const check = () => findSeparationServer().then((url) => alive && setReady(url !== null));
     check();
     const id = setInterval(check, intervalMs);
     return () => {

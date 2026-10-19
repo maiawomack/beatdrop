@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-dbcdd32b2c50",
+  "title": "Never Really Over",
+  "artist": "Katy Perry",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9834497,
+  "durationSec": 223.0045,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 223.0045,
+  "bpm": 100.01,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.386,
+  "gainDb": -2.56,
+  "mixPeakDb": -1.13,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.65,
+      "rmsDb": -19.13
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.65,
+      "rmsDb": -19.36
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -7.25,
+      "rmsDb": -22.37
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -2.65,
+      "rmsDb": -22.17
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

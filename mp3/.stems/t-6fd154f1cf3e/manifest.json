@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-6fd154f1cf3e",
+  "title": "Unconditionally",
+  "artist": "Katy Perry",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 10099201,
+  "durationSec": 229.0068,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 229.0068,
+  "bpm": 86.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.4702,
+  "gainDb": -3.22,
+  "mixPeakDb": -1.58,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.65,
+      "rmsDb": -19.72
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.31,
+      "rmsDb": -20.94
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -8.62,
+      "rmsDb": -22.08
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -3.65,
+      "rmsDb": -21.42
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

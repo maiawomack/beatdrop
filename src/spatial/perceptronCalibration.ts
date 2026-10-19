@@ -11,7 +11,7 @@
  * never stored. Live performance never calls Perceptron.
  */
 
-const SERVICE = 'http://127.0.0.1:8765';
+const SERVICE = import.meta.env.VITE_SERVICE_URL || 'http://127.0.0.1:8765';
 /** Frame rate of the demonstration video sent to Perceptron. */
 const FRAME_EVERY_MS = 200;
 const FRAME_WIDTH = 384;

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-74ebb9c407ce",
+  "title": "Shake It Off",
+  "artist": "Taylor Swift",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 9658881,
+  "durationSec": 219.0222,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 219.0222,
+  "bpm": 80.0,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.7198,
+  "gainDb": -2.34,
+  "mixPeakDb": -1.0,
+  "mixRmsDb": -14.48,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -2.6,
+      "rmsDb": -19.77
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -2.43,
+      "rmsDb": -19.31
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -8.77,
+      "rmsDb": -21.84
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -6.23,
+      "rmsDb": -26.23
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "t-d458b74d4fa5",
+  "title": "PILLOWTALK",
+  "artist": "ZAYN",
+  "sampleRate": 44100,
+  "channels": 2,
+  "frames": 8946177,
+  "durationSec": 202.8612,
+  "clipStartSec": 0.0,
+  "sourceDurationSec": 202.8612,
+  "bpm": 83.34,
+  "bpmSource": "estimated",
+  "firstBeatSec": 0.2032,
+  "gainDb": -3.31,
+  "mixPeakDb": -2.5,
+  "mixRmsDb": -14.0,
+  "source": "demucs:htdemucs",
+  "stems": {
+    "vocals": {
+      "file": "vocals.mp3",
+      "peakDb": -3.4,
+      "rmsDb": -18.97
+    },
+    "drums": {
+      "file": "drums.mp3",
+      "peakDb": -3.4,
+      "rmsDb": -22.88
+    },
+    "bass": {
+      "file": "bass.mp3",
+      "peakDb": -4.71,
+      "rmsDb": -18.56
+    },
+    "instrumental": {
+      "file": "instrumental.mp3",
+      "peakDb": -5.48,
+      "rmsDb": -23.75
+    }
+  },
+  "waveform": "waveform.json",
+  "lyrics": "lyrics.json",
+  "cover": null
+}
